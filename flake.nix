@@ -5,8 +5,7 @@
   description = "Minimal MicroVM Infrastructure - Production Learning Template";
 
   inputs = {
-    # NixOS 24.05 (stable)
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
 
     # MicroVM framework
     microvm = {
