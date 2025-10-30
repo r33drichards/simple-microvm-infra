@@ -153,6 +153,13 @@ sudo microvm -u vm2
 sudo microvm -u vm3
 sudo microvm -u vm4
 sudo microvm -u vm5
+
+# Fix ownership of VM directories
+# (Required because systemd.tmpfiles creates them as root, but microvm@ service runs as microvm:kvm)
+sudo chown -R microvm:kvm /var/lib/microvms/vm{1,2,3,4,5}
+
+# Start all VMs
+sudo systemctl start microvm@vm1 microvm@vm2 microvm@vm3 microvm@vm4 microvm@vm5
 ```
 
 **Verify VMs are running:**
