@@ -25,9 +25,7 @@
 { config, pkgs, ... }:
 
 {
-  imports = [
-    ../../modules/microvm-base.nix
-  ] ++ modules;
+  imports = modules;
 
   # Set hostname and network from parameters
   networking.hostName = hostname;
