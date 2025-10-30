@@ -32,13 +32,6 @@ in
         proto = "virtiofs";
       }
       {
-        # Per-VM /etc (writable)
-        source = "/var/lib/microvms/${config.networking.hostName}/etc";
-        mountPoint = "/etc";
-        tag = "etc";
-        proto = "virtiofs";
-      }
-      {
         # Per-VM /var (writable)
         source = "/var/lib/microvms/${config.networking.hostName}/var";
         mountPoint = "/var";
