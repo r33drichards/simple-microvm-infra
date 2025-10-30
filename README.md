@@ -11,7 +11,7 @@ This project provides a simplified version of enterprise MicroVM infrastructure,
 - Each VM on separate IPv4 subnet with internet access
 - Accessible via Tailscale subnet routing
 - Shared /nix/store for 90% disk space savings
-- ZFS storage with snapshot capability
+- Simple filesystem storage on root volume
 - Clean, minimal codebase with zero cruft
 
 ## Architecture
@@ -56,18 +56,11 @@ cd simple-microvm-infra
 # Deploy hypervisor configuration
 # This will:
 # - Configure network bridges and NAT
-# - Setup ZFS support
-# - Create EBS volume management
+# - Create MicroVM storage directories
 nixos-rebuild switch --flake .#hypervisor
 
-# IMPORTANT: Reboot to load ZFS kernel module
-# SSH connectivity will be maintained after reboot
-sudo reboot
-
-# Wait for reboot (60-90 seconds), then SSH back in
-
-# Create VM storage directories
-mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
+# Storage directories are created automatically by systemd
+# No reboot required!
 
 # Start VMs
 microvm -u vm1 vm2 vm3 vm4
@@ -133,17 +126,17 @@ simple-microvm-infra/
 ## Design Philosophy
 
 **Kept from enterprise patterns:**
-- ZFS for production-grade storage
-- Automated EBS volume lifecycle management
 - Virtiofs shared /nix/store for efficiency
+- Network isolation with bridges and NAT
 - Flakes for reproducible builds
 - Module system for reusable patterns
 
 **Simplified for learning:**
+- Simple filesystem storage (not ZFS)
 - No secrets management (plain config)
 - IPv4 only (not dual-stack)
 - 4 VMs (not 29)
-- Minimal modules (2 vs 15+)
+- Minimal dependencies
 
 **Result:** Every line of code has clear, obvious purpose.
 
@@ -170,7 +163,7 @@ simple-microvm-infra/
 - **Platform:** AWS EC2 ARM instance or ARM bare metal (Graviton-based recommended)
 - **Hardware:** aarch64-linux system with virtualization support
 - **OS:** NixOS 24.05 or later
-- **IAM Permissions:** EC2 volume operations (create, attach, describe, tag)
+- **Storage:** 30GB+ root volume for hypervisor and MicroVMs
 - **Network:** Tailscale account for remote access
 - **Knowledge:** Basic NixOS, AWS, networking, and virtualization concepts
 

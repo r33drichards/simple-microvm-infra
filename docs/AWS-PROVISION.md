@@ -38,41 +38,7 @@ aws ec2 authorize-security-group-ingress \
   --cidr 0.0.0.0/0 2>/dev/null || echo "SSH rule already exists"
 ```
 
-## Step 3: Create IAM Instance Profile (for EBS Volume Management)
-
-```bash
-# Create role if it doesn't exist
-aws iam create-role \
-  --role-name ec2-admin \
-  --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Principal": {"Service": "ec2.amazonaws.com"},
-      "Action": "sts:AssumeRole"
-    }]
-  }' 2>/dev/null || echo "Role already exists"
-
-# Attach policy for EBS operations
-aws iam attach-role-policy \
-  --role-name ec2-admin \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess
-
-# Create instance profile
-aws iam create-instance-profile \
-  --instance-profile-name ec2-admin 2>/dev/null || echo "Instance profile already exists"
-
-# Add role to instance profile
-aws iam add-role-to-instance-profile \
-  --instance-profile-name ec2-admin \
-  --role-name ec2-admin 2>/dev/null || echo "Role already added"
-
-# Wait for IAM changes to propagate
-echo "Waiting 10 seconds for IAM changes to propagate..."
-sleep 10
-```
-
-## Step 4: Launch a1.metal Instance with NixOS
+## Step 3: Launch a1.metal Instance with NixOS
 
 ```bash
 # Latest NixOS 25.05 ARM64 AMI (us-west-2)
@@ -84,7 +50,7 @@ SUBNET_ID=$(aws ec2 describe-subnets \
   --query 'Subnets[0].SubnetId' \
   --output text)
 
-# Launch instance
+# Launch instance with 30GB root volume
 INSTANCE_ID=$(aws ec2 run-instances \
   --image-id $AMI_ID \
   --instance-type a1.metal \
@@ -92,7 +58,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --subnet-id $SUBNET_ID \
   --associate-public-ip-address \
   --security-group-ids $SG_ID \
-  --iam-instance-profile Name=ec2-admin \
+  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=bmnix}]' \
   --query 'Instances[0].InstanceId' \
   --output text)
@@ -113,7 +79,7 @@ echo "Public IP: $PUBLIC_IP"
 echo "SSH command: ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP"
 ```
 
-## Step 5: Wait for Instance to Boot
+## Step 4: Wait for Instance to Boot
 
 ```bash
 # Wait additional time for SSH to be ready
@@ -125,7 +91,7 @@ ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
   -i bm-nixos-us-west-2.pem root@$PUBLIC_IP "echo 'SSH connection successful'"
 ```
 
-## Step 6: Deploy NixOS Configuration
+## Step 5: Deploy NixOS Configuration
 
 ```bash
 # SSH into the instance and deploy
@@ -140,37 +106,20 @@ cd simple-microvm-infra
 # Deploy hypervisor configuration
 nixos-rebuild switch --flake .#hypervisor
 
-# The system is now configured but needs a reboot to load ZFS kernel module
-echo "Configuration deployed. System needs reboot to load ZFS module."
+echo "Configuration deployed successfully!"
 EOF
 ```
 
-## Step 7: Reboot and Verify
-
-```bash
-# Reboot the instance
-ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP "reboot" || echo "Rebooting..."
-
-# Wait for reboot
-echo "Waiting 90 seconds for reboot..."
-sleep 90
-
-# Test SSH after reboot
-ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP "echo 'SSH connection successful after reboot'"
-
-# Verify ZFS is loaded
-ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP "zpool list"
-```
-
-## Step 8: Complete MicroVM Setup
+## Step 6: Complete MicroVM Setup
 
 ```bash
 # SSH and complete the setup
 ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP << 'EOF'
 cd simple-microvm-infra
 
-# Create VM storage directories
-mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
+# Storage directories are created automatically by systemd tmpfiles
+# Verify they exist
+ls -la /var/lib/microvms/
 
 # Start VMs
 microvm -u vm1 vm2 vm3 vm4
@@ -184,24 +133,18 @@ echo "Setup complete! Remember to approve Tailscale routes in admin console."
 
 ## Troubleshooting
 
-### SSH Connection Issues After Reboot
+### SSH Connection Issues
 
-If you lose SSH connectivity after reboot, it may be due to:
-1. Network configuration issues
-2. ZFS not mounting properly
-3. SSH service not starting
-
-To debug:
-```bash
-# View console output
-aws ec2 get-console-output --instance-id $INSTANCE_ID --query 'Output' --output text | tail -100
-```
+If you lose SSH connectivity:
+1. Check security group rules allow SSH (port 22)
+2. Verify instance is running: `aws ec2 describe-instances --instance-ids $INSTANCE_ID`
+3. Check console output: `aws ec2 get-console-output --instance-id $INSTANCE_ID --query 'Output' --output text | tail -100`
 
 ### Instance Won't Boot
 
 If the instance won't boot after nixos-rebuild:
 1. Terminate the instance
-2. Start over from Step 4
+2. Start over from Step 3
 3. Check the configuration for syntax errors before deploying
 
 ## Cleanup
@@ -215,19 +158,6 @@ aws ec2 terminate-instances --instance-ids $INSTANCE_ID
 # Delete key pair
 aws ec2 delete-key-pair --key-name "bm-nixos-us-west-2"
 rm bm-nixos-us-west-2.pem
-
-# Delete IAM resources (optional - may be used by other instances)
-aws iam remove-role-from-instance-profile \
-  --instance-profile-name ec2-admin \
-  --role-name ec2-admin
-
-aws iam delete-instance-profile --instance-profile-name ec2-admin
-
-aws iam detach-role-policy \
-  --role-name ec2-admin \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess
-
-aws iam delete-role --role-name ec2-admin
 ```
 
 ## Next Steps

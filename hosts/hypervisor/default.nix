@@ -1,6 +1,6 @@
 # hosts/hypervisor/default.nix
 # Physical hypervisor host configuration
-# Manages: ZFS storage, Tailscale, MicroVM lifecycle
+# Manages: MicroVM storage, Tailscale, MicroVM lifecycle
 { config, pkgs, ... }:
 {
   imports = [
@@ -10,9 +10,6 @@
 
     # Network bridges, NAT, firewall
     ./network.nix
-
-    # EBS volume management with ZFS
-    ../../modules/ebs-volume
   ];
 
   # Nix settings
@@ -36,14 +33,6 @@
   nixpkgs.config.allowUnfree = true;
 
   networking.hostName = "hypervisor";
-
-  # ZFS support
-  boot.supportedFilesystems = [ "zfs" ];
-  boot.zfs.forceImportRoot = false;
-
-  # Required for ZFS (random 8-char hex string)
-  # Generate with: head -c 4 /dev/urandom | od -A none -t x4 | tr -d ' '
-  networking.hostId = "12345678";  # TODO: Generate unique ID
 
   # Tailscale for remote access and subnet routing
   services.tailscale.enable = true;
@@ -106,25 +95,15 @@
     ];
   };
 
-  # EBS volume management with ZFS
-  services.ebsVolumes = {
-    enable = true;
-    volumes."microvm-storage" = {
-      mountPoint = "/var/lib/microvms";
-      sizeGiB = 100;
-      poolName = "microvm-pool";
-      dataset = "storage";
-      volumeType = "gp3";
-      throughput = 125;  # MiB/s
-      iops = 3000;
-      encrypted = true;
-      mountOptions = [ "nofail" "defaults" ];
-      mountOwner = "root";
-      mountGroup = "root";
-      mountDirMode = "0755";
-      device = "/dev/sdf";
-    };
-  };
+  # Create MicroVM storage directory on root filesystem
+  # This is simpler than ZFS but uses the root volume for storage
+  systemd.tmpfiles.rules = [
+    "d /var/lib/microvms 0755 root root -"
+    "d /var/lib/microvms/vm1 0755 root root -"
+    "d /var/lib/microvms/vm2 0755 root root -"
+    "d /var/lib/microvms/vm3 0755 root root -"
+    "d /var/lib/microvms/vm4 0755 root root -"
+  ];
 
   # NixOS version (don't change after initial install)
   system.stateVersion = "24.05";
