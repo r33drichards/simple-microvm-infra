@@ -21,7 +21,7 @@
     "flakes"
   ];
 
-  nix.trustedUsers = [
+  nix.settings.trusted-users = [
     "root"
     "@wheel"
   ];
@@ -71,7 +71,6 @@
     curl
     wget
     nodejs
-    ghomit 
   ];
 
   # SSH with key-only auth
