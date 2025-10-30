@@ -105,6 +105,59 @@
     "d /var/lib/microvms/vm4 0755 root root -"
   ];
 
+  # Systemd services to add TAP interfaces to bridges when VMs start
+  systemd.services."microvm-bridge-vm1" = {
+    description = "Add vm-vm1 TAP interface to br-vm1 bridge";
+    after = [ "microvm-tap-interfaces@vm1.service" ];
+    bindsTo = [ "microvm@vm1.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm1 master br-vm1";
+      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm1 nomaster";
+    };
+    wantedBy = [ "microvm@vm1.service" ];
+  };
+
+  systemd.services."microvm-bridge-vm2" = {
+    description = "Add vm-vm2 TAP interface to br-vm2 bridge";
+    after = [ "microvm-tap-interfaces@vm2.service" ];
+    bindsTo = [ "microvm@vm2.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm2 master br-vm2";
+      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm2 nomaster";
+    };
+    wantedBy = [ "microvm@vm2.service" ];
+  };
+
+  systemd.services."microvm-bridge-vm3" = {
+    description = "Add vm-vm3 TAP interface to br-vm3 bridge";
+    after = [ "microvm-tap-interfaces@vm3.service" ];
+    bindsTo = [ "microvm@vm3.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm3 master br-vm3";
+      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm3 nomaster";
+    };
+    wantedBy = [ "microvm@vm3.service" ];
+  };
+
+  systemd.services."microvm-bridge-vm4" = {
+    description = "Add vm-vm4 TAP interface to br-vm4 bridge";
+    after = [ "microvm-tap-interfaces@vm4.service" ];
+    bindsTo = [ "microvm@vm4.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm4 master br-vm4";
+      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm4 nomaster";
+    };
+    wantedBy = [ "microvm@vm4.service" ];
+  };
+
   # NixOS version (don't change after initial install)
   system.stateVersion = "24.05";
 }

@@ -46,8 +46,6 @@ in
       id = "vm-${config.networking.hostName}";
       # Generate MAC from network name (vm1->01, vm2->02, etc)
       mac = "02:00:00:00:00:0${lib.substring 2 1 config.microvm.network}";
-      # Add TAP interface to the appropriate bridge
-      bridge = "br-${config.microvm.network}";
     }];
 
     # Enable systemd-networkd for network config
