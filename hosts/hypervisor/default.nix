@@ -177,6 +177,9 @@
     wantedBy = [ "microvm@vm5.service" ];
   };
 
+  # Fix microvm service to use correct working directory
+  systemd.services."microvm@".serviceConfig.WorkingDirectory = "/var/lib/microvms/%i";
+
   # NixOS version (don't change after initial install)
   system.stateVersion = "24.05";
 }
