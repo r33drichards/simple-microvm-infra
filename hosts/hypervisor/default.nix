@@ -10,6 +10,9 @@
 
     # Network bridges, NAT, firewall
     ./network.nix
+
+    # EBS volume management with ZFS
+    ../../modules/ebs-volume
   ];
 
   networking.hostName = "hypervisor";
@@ -53,6 +56,26 @@
     extraGroups = [ "wheel" "networkmanager" ];
     # Add your SSH public key here:
     # openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA..." ];
+  };
+
+  # EBS volume management with ZFS
+  services.ebsVolumes = {
+    enable = true;
+    volumes."microvm-storage" = {
+      mountPoint = "/var/lib/microvms";
+      sizeGiB = 100;
+      poolName = "microvm-pool";
+      dataset = "storage";
+      volumeType = "gp3";
+      throughput = 125;  # MiB/s
+      iops = 3000;
+      encrypted = true;
+      mountOptions = [ "nofail" "defaults" ];
+      mountOwner = "root";
+      mountGroup = "root";
+      mountDirMode = "0755";
+      device = "/dev/sdf";
+    };
   };
 
   # NixOS version (don't change after initial install)
