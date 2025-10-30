@@ -2,21 +2,22 @@
 
 ## Summary
 
-This document describes the deployment of the `wholelottahoopla/sandbox:latest` Docker container to vm1.
+This document describes the deployment of the `wholelottahoopla/sandbox:latest` Docker container to vm1 using NixOS declarative OCI container management.
 
 ## Changes Made
 
-### 1. Configuration Changes (flake.nix:22-32)
-- Enabled Docker in vm1 by setting `virtualisation.docker.enable = true`
-- Added users `robertwendt` and `root` to the `docker` group for permission management
-- Included `docker` package in vm1's system packages
+### 1. Configuration Changes (flake.nix:22-42)
+- Used `virtualisation.oci-containers.backend = "docker"` for Docker backend
+- Declaratively defined the sandbox container with `autoStart = true`
+- Container is managed by NixOS systemd service (`docker-sandbox.service`)
+- No manual docker commands needed - everything is declarative
 
 ### 2. Deployment Script (deploy-vm1-docker.sh)
 Created an automated deployment script that:
 - Checks out the configuration branch
-- Rebuilds vm1 with Docker support
-- Pulls the sandbox container image
-- Runs the container with auto-restart policy
+- Rebuilds vm1 with declarative container configuration
+- Container automatically starts via systemd
+- Verifies deployment via systemd service status
 
 ## Deployment Instructions
 
@@ -49,22 +50,20 @@ git fetch origin
 git checkout claude/deploy-docker-sandbox-011CUeEKVQfDeopHtRiYgA8u
 git pull
 
-# 3. Rebuild and restart vm1 with Docker support
+# 3. Rebuild and restart vm1 with declarative container configuration
 microvm -Ru vm1
 
 # 4. Wait for vm1 to be ready
-sleep 10
+sleep 15
 
-# 5. SSH to vm1 and deploy the container
-ssh root@10.1.0.2
+# 5. Verify the container is running
+ssh root@10.1.0.2 'docker ps -a'
 
-# 6. Inside vm1, pull and run the container
-docker pull wholelottahoopla/sandbox:latest
-docker run -d --name sandbox --restart unless-stopped wholelottahoopla/sandbox:latest
-
-# 7. Verify the container is running
-docker ps -a
+# 6. Check the systemd service status
+ssh root@10.1.0.2 'systemctl status docker-sandbox.service'
 ```
+
+**Note**: With the declarative approach, NixOS automatically pulls the image and starts the container via systemd. No manual docker commands are required!
 
 ## Verification
 
@@ -79,29 +78,45 @@ ssh root@10.1.0.2 'docker ps'
 
 ## Container Management
 
+With declarative OCI containers, the container is managed by systemd as the `docker-sandbox.service` unit.
+
 ### View container logs
 ```bash
+# Via systemd (recommended)
+ssh root@10.1.0.2 'journalctl -u docker-sandbox.service -f'
+
+# Or via docker
 ssh root@10.1.0.2 'docker logs sandbox'
 ```
 
 ### Stop the container
 ```bash
-ssh root@10.1.0.2 'docker stop sandbox'
+ssh root@10.1.0.2 'systemctl stop docker-sandbox.service'
 ```
 
 ### Start the container
 ```bash
-ssh root@10.1.0.2 'docker start sandbox'
-```
-
-### Remove the container
-```bash
-ssh root@10.1.0.2 'docker rm -f sandbox'
+ssh root@10.1.0.2 'systemctl start docker-sandbox.service'
 ```
 
 ### Restart the container
 ```bash
-ssh root@10.1.0.2 'docker restart sandbox'
+ssh root@10.1.0.2 'systemctl restart docker-sandbox.service'
+```
+
+### Check container status
+```bash
+# Via systemd
+ssh root@10.1.0.2 'systemctl status docker-sandbox.service'
+
+# Or via docker
+ssh root@10.1.0.2 'docker ps -a'
+```
+
+### Disable auto-start (requires configuration change)
+To prevent the container from auto-starting, edit `flake.nix` and set `autoStart = false;`, then rebuild:
+```bash
+microvm -Ru vm1
 ```
 
 ## Network Access
@@ -111,14 +126,29 @@ The container runs on vm1 which has the following network configuration:
 - Gateway: `10.1.0.1` (hypervisor bridge)
 - Subnet: `10.1.0.0/24`
 
-If the container exposes any ports, you can access them via:
-- From hypervisor: `10.1.0.2:<port>`
-- Via Tailscale VPN: `10.1.0.2:<port>` (from any device on your Tailnet)
+### Exposing Container Ports
 
-To expose container ports, use Docker's `-p` flag:
-```bash
-docker run -d --name sandbox -p 8080:80 --restart unless-stopped wholelottahoopla/sandbox:latest
+To expose container ports, edit `flake.nix` and add the `ports` configuration:
+
+```nix
+virtualisation.oci-containers.containers.sandbox = {
+  image = "wholelottahoopla/sandbox:latest";
+  autoStart = true;
+  ports = [
+    "8080:80"  # Expose container port 80 on host port 8080
+    "443:443"  # Expose additional ports as needed
+  ];
+};
 ```
+
+Then rebuild vm1:
+```bash
+microvm -Ru vm1
+```
+
+Once ports are exposed, you can access them via:
+- From hypervisor: `10.1.0.2:8080`
+- Via Tailscale VPN: `10.1.0.2:8080` (from any device on your Tailnet)
 
 ## Architecture
 
@@ -186,9 +216,63 @@ git pull
 microvm -Ru vm1
 ```
 
+## NixOS Declarative Container Benefits
+
+This deployment uses NixOS's declarative OCI container management, which provides several advantages:
+
+1. **Infrastructure as Code**: Container configuration is version-controlled in `flake.nix`
+2. **Automatic Management**: NixOS handles pulling images, creating containers, and managing lifecycle
+3. **Systemd Integration**: Container runs as `docker-sandbox.service` with proper logging and monitoring
+4. **Reproducibility**: Same configuration always produces same result
+5. **Atomic Updates**: Configuration changes are atomic and can be rolled back
+6. **No Manual Commands**: No need to run `docker pull` or `docker run` manually
+
+### Configuration Options
+
+The `virtualisation.oci-containers.containers.<name>` module supports many options:
+
+```nix
+virtualisation.oci-containers.containers.sandbox = {
+  image = "wholelottahoopla/sandbox:latest";
+  autoStart = true;
+
+  # Port mappings
+  ports = [ "8080:80" ];
+
+  # Environment variables
+  environment = {
+    KEY = "value";
+  };
+
+  # Environment files (for secrets)
+  environmentFiles = [ "/path/to/env/file" ];
+
+  # Volumes
+  volumes = [
+    "/host/path:/container/path"
+  ];
+
+  # Command override
+  cmd = [ "arg1" "arg2" ];
+
+  # Entrypoint override
+  entrypoint = "/custom/entrypoint.sh";
+
+  # Container dependencies
+  dependsOn = [ "other-container" ];
+
+  # Extra docker options
+  extraOptions = [
+    "--privileged"
+    "--cap-add=NET_ADMIN"
+  ];
+};
+```
+
 ## Notes
 
-- The container is configured with `--restart unless-stopped` to survive VM reboots
+- The container is managed by systemd with automatic restart on failure
 - Container data is stored in vm1's `/var` directory at `/var/lib/microvms/vm1/var/lib/docker`
 - The Docker daemon in vm1 uses virtiofs shared storage for container images and volumes
 - vm1 is on ARM64 architecture (aarch64), ensure the container image supports ARM64
+- All container changes must be made in `flake.nix` and deployed with `microvm -Ru vm1`

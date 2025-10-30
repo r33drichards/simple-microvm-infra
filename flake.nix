@@ -20,15 +20,26 @@
       # Each VM gets its own isolated network (10.X.0.0/24)
       vms = {
         vm1 = {
-          # Docker-enabled VM
+          # Docker-enabled VM with sandbox container
           modules = [
             {
-              virtualisation.docker.enable = true;
-              users.users.robertwendt.extraGroups = [ "docker" ];
-              users.users.root.extraGroups = [ "docker" ];
+              virtualisation.oci-containers = {
+                backend = "docker";
+                containers = {
+                  sandbox = {
+                    image = "wholelottahoopla/sandbox:latest";
+                    autoStart = true;
+                    # Uncomment to expose ports:
+                    # ports = [ "8080:80" ];
+                    # Add environment variables if needed:
+                    # environment = {
+                    #   KEY = "value";
+                    # };
+                  };
+                };
+              };
             }
           ];
-          packages = with nixpkgs.legacyPackages.aarch64-linux; [ docker ];
         };
         vm2 = { };
         vm3 = { };
