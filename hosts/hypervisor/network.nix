@@ -42,7 +42,8 @@
     # IMPORTANT: Change this to your actual physical interface!
     # Find with: ip link show
     # Common names: eth0, ens3, enp0s3, wlan0
-    externalInterface = "eth0";
+    # AWS a1.metal uses: enP2p4s0
+    externalInterface = "enP2p4s0";
 
     # VM bridges that should be NAT'd
     internalInterfaces = [ "br-vm1" "br-vm2" "br-vm3" "br-vm4" ];

@@ -39,27 +39,32 @@ NAT → Internet
 ## Quick Start
 
 **Prerequisites:**
-- NixOS installed on AWS EC2 ARM instance (or ARM bare metal)
-- Appropriate IAM permissions for EBS volume operations
-- Tailscale account
+- AWS account with CLI configured
+- Tailscale account (for remote access)
 
-**Setup:**
+**Full AWS Provisioning:**
+
+See **[AWS Provisioning Guide](docs/AWS-PROVISION.md)** for complete step-by-step instructions to provision everything from scratch using AWS CLI.
+
+**If you already have a NixOS instance:**
 
 ```bash
-nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#git
 # Clone repository
 git clone https://github.com/r33drichards/simple-microvm-infra.git
 cd simple-microvm-infra
 
-# The hypervisor configuration includes the EBS volume module that will:
-# - Automatically create and attach EBS volumes
-# - Setup ZFS pools with optimized settings
-# - Mount storage at /var/lib/microvms
-
-# Deploy hypervisor (this creates ZFS storage automatically via EBS module)
+# Deploy hypervisor configuration
+# This will:
+# - Configure network bridges and NAT
+# - Setup ZFS support
+# - Create EBS volume management
 nixos-rebuild switch --flake .#hypervisor
-# reboot for zfs 
+
+# IMPORTANT: Reboot to load ZFS kernel module
+# SSH connectivity will be maintained after reboot
 sudo reboot
+
+# Wait for reboot (60-90 seconds), then SSH back in
 
 # Create VM storage directories
 mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
