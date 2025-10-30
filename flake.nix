@@ -45,6 +45,11 @@
       vm4 = self.lib.microvmSystem {
         modules = [ ./hosts/vm4 ];
       };
+
+      # MicroVM 5 (10.5.0.2)
+      vm5 = self.lib.microvmSystem {
+        modules = [ ./hosts/vm5 ];
+      };
     };
 
     # Export our library function for building MicroVMs

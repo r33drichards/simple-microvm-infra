@@ -1,14 +1,14 @@
-# hosts/vm4/default.nix
-# MicroVM 4 configuration
-# Network: 10.4.0.2/24 (bridge: br-vm4)
+# hosts/vm5/default.nix
+# MicroVM 5 configuration
+# Network: 10.5.0.2/24 (bridge: br-vm5)
 { config, pkgs, ... }:
 {
   imports = [
     ../../modules/microvm-base.nix
   ];
 
-  networking.hostName = "vm4";
-  microvm.network = "vm4";
+  networking.hostName = "vm5";
+  microvm.network = "vm5";
 
   # VM resources inherited from modules/vm-resources.nix
   # To override: uncomment and set custom values

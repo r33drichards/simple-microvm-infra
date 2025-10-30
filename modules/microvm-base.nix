@@ -1,6 +1,6 @@
 # modules/microvm-base.nix
 # Base configuration shared by all MicroVMs
-# Handles: virtiofs shares, TAP interface, network config
+# Handles: virtiofs shares, TAP interface, network config, resource allocation
 { config, lib, pkgs, ... }:
 
 let
@@ -9,18 +9,27 @@ let
 
   # Look up this VM's network config
   vmNetwork = networks.networks.${config.microvm.network};
+
+  # Load VM resource defaults
+  vmResources = import ./vm-resources.nix { inherit lib; };
 in
 {
+  imports = [ vmResources ];
+
   # Option: which network this VM belongs to
   options.microvm.network = lib.mkOption {
     type = lib.types.str;
-    description = "Network name from networks.nix (vm1, vm2, vm3, or vm4)";
+    description = "Network name from networks.nix";
     example = "vm1";
   };
 
   config = {
     # Use QEMU (better ARM64 device support)
     microvm.hypervisor = "qemu";
+
+    # Default resource allocation (can be overridden by individual VMs)
+    microvm.vcpu = lib.mkDefault config.vmDefaults.vcpu;
+    microvm.mem = lib.mkDefault config.vmDefaults.mem;
 
     # Kernel modules for virtio devices (required for ARM64)
     boot.kernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];

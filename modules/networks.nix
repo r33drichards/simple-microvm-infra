@@ -1,5 +1,5 @@
 # modules/networks.nix
-# Network topology definitions for 4 isolated MicroVMs
+# Network topology definitions for 5 isolated MicroVMs
 # Each VM gets its own bridge and subnet
 {
   networks = {
@@ -18,6 +18,10 @@
     vm4 = {
       subnet = "10.4.0";
       bridge = "br-vm4";
+    };
+    vm5 = {
+      subnet = "10.5.0";
+      bridge = "br-vm5";
     };
   };
 }

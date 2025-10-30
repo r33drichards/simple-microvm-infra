@@ -13,9 +13,10 @@
   # Network assignment (references modules/networks.nix)
   microvm.network = "vm1";
 
-  # VM resources
-  microvm.vcpu = 2;      # 2 virtual CPUs
-  microvm.mem = 1024;    # 1GB RAM
+  # VM resources inherited from modules/vm-resources.nix
+  # To override: uncomment and set custom values
+  # microvm.vcpu = 4;
+  # microvm.mem = 8192;
 
   # Enable SSH for remote access
   services.openssh.enable = true;

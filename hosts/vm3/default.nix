@@ -10,8 +10,10 @@
   networking.hostName = "vm3";
   microvm.network = "vm3";
 
-  microvm.vcpu = 2;
-  microvm.mem = 1024;
+  # VM resources inherited from modules/vm-resources.nix
+  # To override: uncomment and set custom values
+  # microvm.vcpu = 4;
+  # microvm.mem = 8192;
 
   services.openssh.enable = true;
 
