@@ -6,7 +6,7 @@
 { modules }:
 
 nixpkgs.lib.nixosSystem {
-  system = "x86_64-linux";
+  system = "aarch64-linux";
 
   modules = [
     # Include microvm.nix module (provides microvm.* options)
