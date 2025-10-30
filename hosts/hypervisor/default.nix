@@ -10,6 +10,15 @@
 
     # Network bridges, NAT, firewall
     ./network.nix
+
+    # Webhook service configuration (NixOS module)
+    ../../modules/nixos-webhook.nix
+
+    # Webhook deployment configuration
+    ../../modules/webhook.nix
+
+    # Caddy reverse proxy
+    ../../modules/caddy.nix
   ];
 
   # Nix settings
@@ -179,6 +188,24 @@
 
   # Fix microvm service to use correct working directory
   systemd.services."microvm@".serviceConfig.WorkingDirectory = "/var/lib/microvms/%i";
+
+  # === Webhook and Caddy Configuration ===
+  # Enable webhook service for automated deployments
+  services.microvm-webhook = {
+    enable = true;
+    infrastructureDir = "/home/robertwendt/simple-microvm-infra"; # TODO: Update this path
+    gitBranch = "main"; # TODO: Update if using different branch
+    secretToken = null; # TODO: Set this to a secure random token
+    port = 9000;
+  };
+
+  # Enable Caddy reverse proxy for webhook
+  services.microvm-caddy = {
+    enable = false; # TODO: Set to true and configure domain/email
+    domain = "webhooks.example.com"; # TODO: Replace with your actual domain
+    email = "admin@example.com"; # TODO: Replace with your email for Let's Encrypt
+    webhookPort = 9000;
+  };
 
   # NixOS version (don't change after initial install)
   system.stateVersion = "24.05";
