@@ -103,6 +103,7 @@
     "d /var/lib/microvms/vm2 0755 root root -"
     "d /var/lib/microvms/vm3 0755 root root -"
     "d /var/lib/microvms/vm4 0755 root root -"
+    "d /var/lib/microvms/vm5 0755 root root -"
   ];
 
   # Systemd services to add TAP interfaces to bridges when VMs start
@@ -156,6 +157,19 @@
       ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm4 nomaster";
     };
     wantedBy = [ "microvm@vm4.service" ];
+  };
+
+  systemd.services."microvm-bridge-vm5" = {
+    description = "Add vm-vm5 TAP interface to br-vm5 bridge";
+    after = [ "microvm-tap-interfaces@vm5.service" ];
+    bindsTo = [ "microvm@vm5.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm5 master br-vm5";
+      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm5 nomaster";
+    };
+    wantedBy = [ "microvm@vm5.service" ];
   };
 
   # NixOS version (don't change after initial install)
