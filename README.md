@@ -46,6 +46,7 @@ NAT → Internet
 **Setup:**
 
 ```bash
+nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#git
 # Clone repository
 git clone https://github.com/r33drichards/simple-microvm-infra.git
 cd simple-microvm-infra
@@ -57,6 +58,8 @@ cd simple-microvm-infra
 
 # Deploy hypervisor (this creates ZFS storage automatically via EBS module)
 nixos-rebuild switch --flake .#hypervisor
+# reboot for zfs 
+sudo reboot
 
 # Create VM storage directories
 mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
