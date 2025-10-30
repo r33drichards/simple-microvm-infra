@@ -152,6 +152,7 @@ sudo systemctl status microvm@vm1
 sudo microvm -u vm2
 sudo microvm -u vm3
 sudo microvm -u vm4
+sudo microvm -u vm5
 ```
 
 **Verify VMs are running:**
@@ -161,13 +162,14 @@ sudo systemctl status microvm@vm1
 sudo systemctl status microvm@vm2
 sudo systemctl status microvm@vm3
 sudo systemctl status microvm@vm4
+sudo systemctl status microvm@vm5
 ```
 
 **Check VM processes:**
 
 ```bash
 ps aux | grep microvm
-# Should see 4 cloud-hypervisor processes
+# Should see 5 cloud-hypervisor processes
 ```
 
 ## Step 6: Setup Tailscale
@@ -311,6 +313,7 @@ sudo microvm -u vm1
 sudo microvm -u vm2
 sudo microvm -u vm3
 sudo microvm -u vm4
+sudo microvm -u vm5
 ```
 
 ## Stopping VMs
@@ -320,17 +323,18 @@ sudo systemctl stop microvm@vm1
 sudo systemctl stop microvm@vm2
 sudo systemctl stop microvm@vm3
 sudo systemctl stop microvm@vm4
+sudo systemctl stop microvm@vm5
 ```
 
 ## Uninstall
 
 ```bash
 # Stop and disable VMs
-sudo systemctl stop microvm@{vm1,vm2,vm3,vm4}
-sudo systemctl disable microvm@{vm1,vm2,vm3,vm4}
+sudo systemctl stop microvm@{vm1,vm2,vm3,vm4,vm5}
+sudo systemctl disable microvm@{vm1,vm2,vm3,vm4,vm5}
 
 # Remove VM data (DESTRUCTIVE!)
-sudo rm -rf /var/lib/microvms/{vm1,vm2,vm3,vm4}
+sudo rm -rf /var/lib/microvms/{vm1,vm2,vm3,vm4,vm5}
 
 # Stop EBS volume service
 sudo systemctl stop ebs-volume-microvm-storage
