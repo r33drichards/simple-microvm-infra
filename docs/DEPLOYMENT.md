@@ -4,9 +4,9 @@ Complete deployment guide for simple-microvm-infra.
 
 ## Prerequisites
 
-- NixOS 24.05 or later installed on hypervisor
+- NixOS 24.05 or later installed on AWS EC2 instance (Nitro-based recommended)
 - Hardware virtualization support (Intel VT-x or AMD-V)
-- Disk for ZFS (can be existing system disk)
+- IAM role/permissions for EBS volume operations (create-volume, attach-volume, describe-volumes, create-tags)
 - Tailscale account (free tier sufficient)
 
 ## Step 1: Prepare Hypervisor
@@ -30,31 +30,40 @@ ip link show
 
 Note the interface name for Step 2.2.
 
-## Step 2: Setup ZFS Storage
+## Step 2: Configure EBS Storage (Automated)
 
-```bash
-# List available disks
-lsblk
+The hypervisor configuration includes an EBS volume management module that automatically handles:
+- Creating EBS volumes if they don't exist
+- Attaching volumes to the instance
+- Setting up ZFS pools with optimized settings
+- Mounting storage at the configured mount points
 
-# Create ZFS pool (WILL ERASE DISK!)
-# Replace /dev/sda with your target disk
-sudo zpool create -f rpool /dev/sda
+**The EBS module is pre-configured in `hosts/hypervisor/default.nix`:**
 
-# Create datasets
-sudo zfs create -o mountpoint=/var/lib/microvms rpool/microvms
-sudo zfs create -o mountpoint=/nix rpool/nix
-
-# Create VM storage directories
-sudo mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
+```nix
+services.ebsVolumes = {
+  enable = true;
+  volumes."microvm-storage" = {
+    mountPoint = "/var/lib/microvms";
+    sizeGiB = 100;
+    poolName = "microvm-pool";
+    dataset = "storage";
+    volumeType = "gp3";
+    throughput = 125;
+    iops = 3000;
+    encrypted = true;
+    device = "/dev/sdf";
+  };
+}
 ```
 
-**Alternative:** If using existing ZFS pool, just create datasets:
+**No manual ZFS commands needed!** The module will automatically:
+1. Look up or create an EBS volume with Name tag "microvm-storage"
+2. Attach it to the instance
+3. Create a ZFS pool named "microvm-pool" with optimal settings
+4. Create and mount the "storage" dataset at /var/lib/microvms
 
-```bash
-sudo zfs create -o mountpoint=/var/lib/microvms rpool/microvms
-sudo zfs create -o mountpoint=/nix rpool/nix
-sudo mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
-```
+**To customize the configuration**, edit `hosts/hypervisor/default.nix` before deployment. See [EBS Volume Module documentation](../modules/ebs-volume/README.md) for all available options.
 
 ## Step 3: Clone and Configure Repository
 
@@ -99,17 +108,33 @@ networking.hostId = "a1b2c3d4";  # Replace with your generated ID
 
 ```bash
 # Build and activate hypervisor configuration
+# This will automatically:
+# - Create/attach EBS volume
+# - Setup ZFS pool and dataset
+# - Configure network bridges
+# - Start Tailscale
 sudo nixos-rebuild switch --flake .#hypervisor
 
 # Reboot to ensure all changes take effect
 sudo reboot
 ```
 
-After reboot, verify bridges were created:
+After reboot, verify everything was created:
 
 ```bash
+# Check bridges
 ip link show br-vm1  # Should exist
 ip addr show br-vm1  # Should show 10.1.0.1/24
+
+# Check ZFS pool and dataset
+sudo zpool status microvm-pool
+sudo zfs list microvm-pool/storage
+
+# Check EBS volume mount
+df -h | grep /var/lib/microvms
+
+# Check EBS volume service
+sudo systemctl status ebs-volume-microvm-storage
 ```
 
 ## Step 5: Deploy MicroVMs
@@ -205,6 +230,25 @@ This confirms VMs are isolated from each other. ✓
 
 ## Troubleshooting
 
+### EBS Volume Issues
+
+```bash
+# Check EBS volume service status
+sudo journalctl -u ebs-volume-microvm-storage -n 100
+
+# Common issues:
+# - IAM permissions: ensure EC2 volume permissions are granted
+# - Volume not attaching: check AWS EC2 console for volume status
+# - ZFS module not loading: run `sudo modprobe zfs` and check dmesg
+# - Volume already attached: check `lsblk` and AWS console
+
+# Manual inspection
+lsblk                           # Check if NVMe device exists
+sudo zpool status               # Check ZFS pool status
+sudo zfs list                   # List all datasets
+aws ec2 describe-volumes --region <region> --filters "Name=tag:Name,Values=microvm-storage"
+```
+
 ### VMs Won't Start
 
 ```bash
@@ -215,6 +259,7 @@ sudo journalctl -u microvm@vm1 -n 100
 # - Storage directories missing: check /var/lib/microvms/vm1/{etc,var}
 # - Bridge not created: check `ip link show br-vm1`
 # - Build failed: try `nix build .#nixosConfigurations.vm1...`
+# - EBS volume not mounted: check `df -h | grep microvms`
 ```
 
 ### No Internet from VMs
@@ -287,6 +332,18 @@ sudo systemctl disable microvm@{vm1,vm2,vm3,vm4}
 # Remove VM data (DESTRUCTIVE!)
 sudo rm -rf /var/lib/microvms/{vm1,vm2,vm3,vm4}
 
-# Remove ZFS datasets (DESTRUCTIVE!)
-sudo zfs destroy rpool/microvms
+# Stop EBS volume service
+sudo systemctl stop ebs-volume-microvm-storage
+
+# Unmount and destroy ZFS pool (DESTRUCTIVE!)
+sudo umount /var/lib/microvms
+sudo zpool destroy microvm-pool
+
+# Detach EBS volume (in AWS console or via CLI)
+VOLUME_ID=$(aws ec2 describe-volumes --region <region> --filters "Name=tag:Name,Values=microvm-storage" --query "Volumes[0].VolumeId" --output text)
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+aws ec2 detach-volume --region <region> --volume-id $VOLUME_ID
+
+# Optional: Delete the EBS volume (DESTRUCTIVE!)
+# aws ec2 delete-volume --region <region> --volume-id $VOLUME_ID
 ```
