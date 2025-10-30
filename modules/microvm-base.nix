@@ -81,6 +81,15 @@ in
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
     ];
 
+    # Create robertwendt user (same as hypervisor)
+    users.users.robertwendt = {
+      isNormalUser = true;
+      extraGroups = [ "wheel" ];
+      openssh.authorizedKeys.keys = [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
+      ];
+    };
+
     # Disable sudo password for convenience
     security.sudo.wheelNeedsPassword = false;
   };
