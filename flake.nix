@@ -1,6 +1,6 @@
 # flake.nix
 # Main entry point for simple-microvm-infra
-# Defines: dependencies (nixpkgs, microvm.nix) and all 5 system configs
+# Defines: dependencies (nixpkgs, microvm.nix) and all system configs
 {
   description = "Minimal MicroVM Infrastructure - Production Learning Template";
 
@@ -14,45 +14,48 @@
     };
   };
 
-  outputs = { self, nixpkgs, microvm }: {
-    # All system configurations
-    nixosConfigurations = {
-      # Hypervisor (physical host)
-      hypervisor = nixpkgs.lib.nixosSystem {
-        system = "aarch64-linux";
-        modules = [
-          microvm.nixosModules.host  # Enable MicroVM host support
-          ./hosts/hypervisor
-        ];
+  outputs = { self, nixpkgs, microvm }:
+    let
+      # VM definitions - add/remove VMs here
+      # Each VM gets its own isolated network (10.X.0.0/24)
+      vms = {
+        vm1 = {
+          # Optional: customize per VM
+          # modules = [ ./path/to/custom.nix ];
+          # packages = with pkgs; [ git docker ];
+        };
+        vm2 = { };
+        vm3 = { };
+        vm4 = { };
+        vm5 = { };
       };
 
-      # MicroVM 1 (10.1.0.2)
-      vm1 = self.lib.microvmSystem {
-        modules = [ ./hosts/vm1 ];
-      };
+      # Generate nixosConfiguration for each VM
+      vmConfigurations = nixpkgs.lib.mapAttrs (name: vmConfig:
+        self.lib.microvmSystem {
+          modules = [
+            (import ./lib/create-vm.nix ({
+              hostname = name;
+              network = name;
+            } // vmConfig))
+          ];
+        }
+      ) vms;
 
-      # MicroVM 2 (10.2.0.2)
-      vm2 = self.lib.microvmSystem {
-        modules = [ ./hosts/vm2 ];
-      };
+    in {
+      # All system configurations
+      nixosConfigurations = {
+        # Hypervisor (physical host)
+        hypervisor = nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            microvm.nixosModules.host  # Enable MicroVM host support
+            ./hosts/hypervisor
+          ];
+        };
+      } // vmConfigurations;  # Merge in generated VM configurations
 
-      # MicroVM 3 (10.3.0.2)
-      vm3 = self.lib.microvmSystem {
-        modules = [ ./hosts/vm3 ];
-      };
-
-      # MicroVM 4 (10.4.0.2)
-      vm4 = self.lib.microvmSystem {
-        modules = [ ./hosts/vm4 ];
-      };
-
-      # MicroVM 5 (10.5.0.2)
-      vm5 = self.lib.microvmSystem {
-        modules = [ ./hosts/vm5 ];
-      };
+      # Export our library function for building MicroVMs
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm; };
     };
-
-    # Export our library function for building MicroVMs
-    lib.microvmSystem = import ./lib { inherit self nixpkgs microvm; };
-  };
 }
