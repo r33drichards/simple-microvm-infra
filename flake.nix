@@ -23,6 +23,9 @@
           # Docker-enabled VM with sandbox container
           modules = [
             {
+              # Enable Docker
+              virtualisation.docker.enable = true;
+
               virtualisation.oci-containers = {
                 backend = "docker";
                 containers = {
