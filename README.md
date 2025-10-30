@@ -39,8 +39,8 @@ NAT → Internet
 ## Quick Start
 
 **Prerequisites:**
-- NixOS installed on hypervisor
-- ZFS pool configured
+- NixOS installed on AWS EC2 instance
+- Appropriate IAM permissions for EBS volume operations
 - Tailscale account
 
 **Setup:**
@@ -50,14 +50,16 @@ NAT → Internet
 git clone https://github.com/r33drichards/simple-microvm-infra.git
 cd simple-microvm-infra
 
-# Setup ZFS
-zpool create -f rpool /dev/sda
-zfs create -o mountpoint=/var/lib/microvms rpool/microvms
-zfs create -o mountpoint=/nix rpool/nix
-mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
+# The hypervisor configuration includes the EBS volume module that will:
+# - Automatically create and attach EBS volumes
+# - Setup ZFS pools with optimized settings
+# - Mount storage at /var/lib/microvms
 
-# Deploy hypervisor
+# Deploy hypervisor (this creates ZFS storage automatically via EBS module)
 nixos-rebuild switch --flake .#hypervisor
+
+# Create VM storage directories
+mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
 
 # Start VMs
 microvm -u vm1 vm2 vm3 vm4
@@ -92,6 +94,7 @@ simple-microvm-infra/
 │   ├── vm3/            # VM3: 10.3.0.0/24
 │   └── vm4/            # VM4: 10.4.0.0/24
 ├── modules/            # Reusable NixOS modules
+│   ├── ebs-volume/     # EBS volume management with ZFS
 │   ├── microvm-base.nix   # Shared MicroVM config
 │   └── networks.nix       # Network topology
 ├── lib/                # Helper functions
@@ -109,6 +112,8 @@ simple-microvm-infra/
 
 **📋 [Implementation Plan](docs/plans/IMPLEMENTATION-PLAN.md)** - Detailed task breakdown used to build this project
 
+**💾 [EBS Volume Module](modules/ebs-volume/README.md)** - Automated EBS volume management with ZFS
+
 **What's documented:**
 - Complete architecture and network topology
 - Storage design with ZFS and virtiofs
@@ -121,6 +126,7 @@ simple-microvm-infra/
 
 **Kept from enterprise patterns:**
 - ZFS for production-grade storage
+- Automated EBS volume lifecycle management
 - Virtiofs shared /nix/store for efficiency
 - Flakes for reproducible builds
 - Module system for reusable patterns
@@ -153,11 +159,12 @@ simple-microvm-infra/
 
 ## Requirements
 
+- **Platform:** AWS EC2 instance (Nitro-based recommended)
 - **Hardware:** x86_64 system with virtualization support (Intel VT-x/AMD-V)
 - **OS:** NixOS 24.05 or later
-- **Storage:** ZFS-compatible disk
+- **IAM Permissions:** EC2 volume operations (create, attach, describe, tag)
 - **Network:** Tailscale account for remote access
-- **Knowledge:** Basic NixOS, networking, and virtualization concepts
+- **Knowledge:** Basic NixOS, AWS, networking, and virtualization concepts
 
 ## Status
 

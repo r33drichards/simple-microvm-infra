@@ -33,11 +33,19 @@ Run these tests after completing deployment.
 ### Test 1: Hypervisor Services
 
 ```bash
-# ZFS pool exists
-sudo zpool status rpool
+# EBS volume service running
+sudo systemctl is-active ebs-volume-microvm-storage
 
-# Datasets mounted
-df -h | grep -E "microvms|nix"
+# ZFS pool exists
+sudo zpool status microvm-pool
+
+# ZFS dataset exists and mounted
+sudo zfs list microvm-pool/storage
+df -h | grep /var/lib/microvms
+
+# EBS volume attached
+lsblk | grep nvme
+aws ec2 describe-volumes --filters "Name=tag:Name,Values=microvm-storage" --query "Volumes[0].[VolumeId,State,Attachments[0].State]" --output text
 
 # Bridges exist
 ip link show br-vm1
@@ -165,6 +173,31 @@ ssh root@10.1.0.2 "free -h | grep Mem"
 # Should show ~1GB total
 ```
 
+### Test 9: ZFS Features
+
+```bash
+# Check ZFS compression is enabled
+sudo zfs get compression microvm-pool/storage
+# Should show: zstd
+
+# Check ZFS properties
+sudo zfs get all microvm-pool/storage | grep -E "compression|atime|xattr|acltype"
+
+# Test ZFS snapshot capability
+sudo zfs snapshot microvm-pool/storage@test
+sudo zfs list -t snapshot
+sudo zfs destroy microvm-pool/storage@test
+
+# Check ZFS pool health
+sudo zpool status microvm-pool
+# Should show: ONLINE
+
+# Verify EBS volume persistent across reboots
+sudo zpool export microvm-pool
+sudo zpool import microvm-pool
+sudo zpool status microvm-pool
+```
+
 ## Performance Tests
 
 ### VM Boot Time
@@ -198,6 +231,8 @@ iperf3 -c 10.1.0.2
 
 All tests should pass:
 
+- [ ] EBS volume automatically created, attached, and configured
+- [ ] ZFS pool created with optimized settings (zstd compression, etc.)
 - [ ] Hypervisor services running (ZFS, Tailscale, bridges)
 - [ ] 4 VMs running and accessible via SSH
 - [ ] VMs have internet access via NAT
@@ -206,6 +241,7 @@ All tests should pass:
 - [ ] Shared /nix/store working (virtiofs)
 - [ ] VM boot time < 10 seconds
 - [ ] Network throughput > 1 Gbps
+- [ ] ZFS snapshots can be created and destroyed
 
 ## Debugging
 

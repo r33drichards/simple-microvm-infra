@@ -74,12 +74,27 @@ NAT via Host → Internet
 
 ### Storage Architecture
 
-**ZFS Layout:**
+**Automated EBS Volume Management:**
+
+The infrastructure uses a custom NixOS module for automated EBS volume lifecycle management:
+- Automatically creates EBS volumes if they don't exist (tagged by name)
+- Attaches volumes to the EC2 instance
+- Creates ZFS pools with optimized settings
+- Handles NVMe device detection on Nitro instances
+- Idempotent operations with retry logic for AWS API calls
+
+**ZFS Pool Configuration:**
 ```
-rpool/
-├── microvms/          → /var/lib/microvms (VM persistent data)
-└── nix/               → /nix (shared store)
+microvm-pool/
+└── storage/          → /var/lib/microvms (VM persistent data)
 ```
+
+**ZFS Optimizations (applied by EBS module):**
+- `ashift=12` - 4K sector alignment
+- `compression=zstd` - Modern compression algorithm
+- `xattr=sa` - Extended attributes in system attributes
+- `acltype=posixacl` - POSIX ACL support
+- `atime=off` - Disable access time updates for performance
 
 **VM Filesystem (virtiofs shares):**
 - `/nix/.ro-store` → Host `/nix/store` (read-only, shared across all VMs)
@@ -113,6 +128,7 @@ simple-microvm-infra/
 │       └── default.nix    # VM4 config (subnet 10.4.0.0/24)
 │
 ├── modules/                 # Reusable modules
+│   ├── ebs-volume/        # EBS volume management with ZFS
 │   ├── microvm-base.nix   # Shared MicroVM config (virtiofs, networking)
 │   └── networks.nix       # Network definitions (subnets, bridges)
 │
@@ -325,30 +341,28 @@ nixpkgs.lib.nixosSystem {
 
 ### Initial Setup
 
-**1. Install NixOS on hypervisor**
-- Standard NixOS installation
+**1. Install NixOS on AWS EC2 instance**
+- Launch NixOS AMI on EC2 (Nitro-based instance recommended)
 - Ensure hardware supports virtualization (Intel VT-x/AMD-V)
+- Attach IAM role with EBS volume permissions
 
-**2. Setup ZFS pools:**
-
-```bash
-# Create ZFS pool (replace /dev/sda with actual disk)
-zpool create -f rpool /dev/sda
-zfs create -o mountpoint=/var/lib/microvms rpool/microvms
-zfs create -o mountpoint=/nix rpool/nix
-
-# Create VM storage directories
-mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
-```
-
-**3. Clone and build:**
+**2. Clone and configure:**
 
 ```bash
 git clone <repo-url> /etc/nixos/simple-microvm-infra
 cd /etc/nixos/simple-microvm-infra
 
-# Build and activate hypervisor config
+# The EBS volume module is pre-configured in hosts/hypervisor/default.nix
+# It will automatically:
+# - Create/attach EBS volume with Name tag "microvm-storage"
+# - Setup ZFS pool "microvm-pool" with optimized settings
+# - Mount at /var/lib/microvms
+
+# Build and activate hypervisor config (this creates EBS volume + ZFS)
 nixos-rebuild switch --flake .#hypervisor
+
+# Create VM storage directories
+mkdir -p /var/lib/microvms/{vm1,vm2,vm3,vm4}/{etc,var}
 
 # Build and start VMs
 microvm -u vm1
@@ -426,6 +440,11 @@ microvm -u vm1 vm2 vm3 vm4
 - **Flakes:** Modern Nix, proper dependency management
 - **Module system:** Reusable patterns, professional structure
 - **Cloud-Hypervisor:** Fast, lightweight, production-ready hypervisor
+
+**Enhanced for AWS:**
+- **Automated EBS volume management:** Custom module handles complete lifecycle (create, attach, format, mount)
+- **NVMe device detection:** Proper support for Nitro-based EC2 instances
+- **Idempotent operations:** Safe to run repeatedly with retry logic for transient failures
 
 ## Future Extensions
 
