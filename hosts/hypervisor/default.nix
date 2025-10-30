@@ -86,6 +86,11 @@
     # openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA..." ];
   };
 
+  # Root user: allow SSH with robertwendt's key
+  users.users.root.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
+  ];
+
   # Additional user: robertwendt
   users.users.robertwendt = {
     isNormalUser = true;

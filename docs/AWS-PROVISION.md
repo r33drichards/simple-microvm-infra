@@ -122,10 +122,10 @@ cd simple-microvm-infra
 ls -la /var/lib/microvms/
 
 # Start VMs
-microvm -u vm1 vm2 vm3 vm4
+microvm -u vm1 vm2 vm3 vm4 vm5
 
 # Configure Tailscale
-tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24
+tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24,10.5.0.0/24
 EOF
 
 echo "Setup complete! Remember to approve Tailscale routes in admin console."

@@ -177,7 +177,7 @@ ps aux | grep microvm
 ### 6.1 Authenticate Tailscale
 
 ```bash
-sudo tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24
+sudo tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24,10.5.0.0/24
 ```
 
 Follow the authentication URL that appears.
@@ -187,7 +187,7 @@ Follow the authentication URL that appears.
 1. Go to https://login.tailscale.com/admin/machines
 2. Find your hypervisor machine
 3. Click "Edit route settings"
-4. Approve all 4 subnet routes (10.1.0.0/24, 10.2.0.0/24, 10.3.0.0/24, 10.4.0.0/24)
+4. Approve all 5 subnet routes (10.1.0.0/24, 10.2.0.0/24, 10.3.0.0/24, 10.4.0.0/24, 10.5.0.0/24)
 
 ## Step 7: Test Access
 
