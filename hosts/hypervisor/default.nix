@@ -71,7 +71,6 @@
     curl
     wget
     nodejs
-    claude-code
     gh  # GitHub CLI for Flux bootstrap
   ];
 
