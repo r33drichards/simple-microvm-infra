@@ -20,9 +20,15 @@
       # Each VM gets its own isolated network (10.X.0.0/24)
       vms = {
         vm1 = {
-          # Optional: customize per VM
-          # modules = [ ./path/to/custom.nix ];
-          # packages = with pkgs; [ git docker ];
+          # Docker-enabled VM
+          modules = [
+            {
+              virtualisation.docker.enable = true;
+              users.users.robertwendt.extraGroups = [ "docker" ];
+              users.users.root.extraGroups = [ "docker" ];
+            }
+          ];
+          packages = with nixpkgs.legacyPackages.aarch64-linux; [ docker ];
         };
         vm2 = { };
         vm3 = { };
