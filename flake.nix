@@ -29,8 +29,7 @@
                   sandbox = {
                     image = "wholelottahoopla/sandbox:latest";
                     autoStart = true;
-                    # Uncomment to expose ports:
-                    # ports = [ "8080:80" ];
+                    ports = [ "0.0.0.0:8080:8080" ];
                     # Add environment variables if needed:
                     # environment = {
                     #   KEY = "value";
