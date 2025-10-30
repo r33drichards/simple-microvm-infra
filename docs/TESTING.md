@@ -24,6 +24,7 @@ nix build .#nixosConfigurations.vm1.config.system.build.toplevel
 nix build .#nixosConfigurations.vm2.config.system.build.toplevel
 nix build .#nixosConfigurations.vm3.config.system.build.toplevel
 nix build .#nixosConfigurations.vm4.config.system.build.toplevel
+nix build .#nixosConfigurations.vm5.config.system.build.toplevel
 ```
 
 ## Post-Deployment Tests
@@ -52,12 +53,14 @@ ip link show br-vm1
 ip link show br-vm2
 ip link show br-vm3
 ip link show br-vm4
+ip link show br-vm5
 
 # Bridges have IPs
 ip addr show br-vm1 | grep 10.1.0.1
 ip addr show br-vm2 | grep 10.2.0.1
 ip addr show br-vm3 | grep 10.3.0.1
 ip addr show br-vm4 | grep 10.4.0.1
+ip addr show br-vm5 | grep 10.5.0.1
 
 # IP forwarding enabled
 sysctl net.ipv4.ip_forward | grep "= 1"
@@ -77,10 +80,11 @@ sudo systemctl is-active microvm@vm1
 sudo systemctl is-active microvm@vm2
 sudo systemctl is-active microvm@vm3
 sudo systemctl is-active microvm@vm4
+sudo systemctl is-active microvm@vm5
 
 # VM processes exist
 ps aux | grep cloud-hypervisor | grep -v grep | wc -l
-# Should output: 4
+# Should output: 5
 ```
 
 ### Test 3: VM Network Connectivity
@@ -91,7 +95,7 @@ ssh root@10.1.0.2 "hostname"
 # Should output: vm1
 
 # Test from hypervisor to all VMs
-for i in {1..4}; do
+for i in {1..5}; do
   echo "Testing VM$i..."
   ssh root@10.$i.0.2 "hostname && ip addr show eth0"
 done
@@ -123,7 +127,7 @@ ssh root@10.2.0.2 "ping -c 2 10.3.0.2"
 
 # Verify firewall rules exist
 sudo iptables -L FORWARD | grep DROP | wc -l
-# Should output: 12 (or more)
+# Should output: 20 (5 VMs with 4 isolation rules each)
 ```
 
 ### Test 6: Tailscale Access
@@ -234,7 +238,7 @@ All tests should pass:
 - [ ] EBS volume automatically created, attached, and configured
 - [ ] ZFS pool created with optimized settings (zstd compression, etc.)
 - [ ] Hypervisor services running (ZFS, Tailscale, bridges)
-- [ ] 4 VMs running and accessible via SSH
+- [ ] 5 VMs running and accessible via SSH (3 vCPU, 6GB RAM each)
 - [ ] VMs have internet access via NAT
 - [ ] VMs isolated from each other
 - [ ] VMs accessible via Tailscale from remote machines

@@ -1,34 +1,50 @@
 # hosts/hypervisor/network.nix
 # Networking for hypervisor: bridges, NAT, isolation firewall
+# All VM network configuration is derived from modules/networks.nix
 { config, pkgs, lib, ... }:
-{
-  # Create 4 isolated bridges (no physical interfaces attached)
-  networking.bridges = {
-    "br-vm1" = { interfaces = []; };
-    "br-vm2" = { interfaces = []; };
-    "br-vm3" = { interfaces = []; };
-    "br-vm4" = { interfaces = []; };
-  };
 
-  # Assign gateway IPs to bridges (host side)
-  networking.interfaces = {
-    br-vm1.ipv4.addresses = [{
-      address = "10.1.0.1";
+let
+  # Import centralized network definitions
+  networks = import ../../modules/networks.nix;
+
+  # Extract list of bridge names for easier iteration
+  bridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge) networks.networks);
+
+  # Generate firewall rules to block all inter-VM traffic
+  # For each bridge, create rules to DROP traffic to all other bridges
+  generateIsolationRules =
+    let
+      # Get list of all bridge names
+      allBridges = bridges;
+    in
+    lib.concatStringsSep "\n" (
+      lib.flatten (
+        map (sourceBridge:
+          let
+            # Get all bridges except the source
+            targetBridges = lib.filter (b: b != sourceBridge) allBridges;
+          in
+          # Create DROP rules for this source to all other bridges
+          map (targetBridge:
+            "      iptables -I FORWARD -i ${sourceBridge} -o ${targetBridge} -j DROP"
+          ) targetBridges
+        ) allBridges
+      )
+    );
+in
+{
+  # Create isolated bridges dynamically from networks.nix
+  # Each bridge has no physical interfaces attached (pure virtual)
+  networking.bridges = lib.mapAttrs (_: _: { interfaces = []; })
+    (lib.mapAttrs (_: net: net.bridge) networks.networks);
+
+  # Assign gateway IPs to bridges (host side gets .1 in each subnet)
+  networking.interfaces = lib.mapAttrs (_: net: {
+    ipv4.addresses = [{
+      address = "${net.subnet}.1";
       prefixLength = 24;
     }];
-    br-vm2.ipv4.addresses = [{
-      address = "10.2.0.1";
-      prefixLength = 24;
-    }];
-    br-vm3.ipv4.addresses = [{
-      address = "10.3.0.1";
-      prefixLength = 24;
-    }];
-    br-vm4.ipv4.addresses = [{
-      address = "10.4.0.1";
-      prefixLength = 24;
-    }];
-  };
+  }) networks.networks;
 
   # Enable IP forwarding (required for NAT)
   boot.kernel.sysctl = {
@@ -45,8 +61,8 @@
     # AWS a1.metal uses: enP2p4s0
     externalInterface = "enP2p4s0";
 
-    # VM bridges that should be NAT'd
-    internalInterfaces = [ "br-vm1" "br-vm2" "br-vm3" "br-vm4" ];
+    # VM bridges that should be NAT'd (generated from networks.nix)
+    internalInterfaces = bridges;
   };
 
   # Firewall configuration
@@ -61,26 +77,9 @@
 
     # Block inter-VM traffic (maintain isolation)
     # Each VM can reach internet but not other VMs
+    # Rules are generated dynamically from networks.nix
     extraCommands = ''
-      # VM1 cannot reach VM2, VM3, VM4
-      iptables -I FORWARD -i br-vm1 -o br-vm2 -j DROP
-      iptables -I FORWARD -i br-vm1 -o br-vm3 -j DROP
-      iptables -I FORWARD -i br-vm1 -o br-vm4 -j DROP
-
-      # VM2 cannot reach VM1, VM3, VM4
-      iptables -I FORWARD -i br-vm2 -o br-vm1 -j DROP
-      iptables -I FORWARD -i br-vm2 -o br-vm3 -j DROP
-      iptables -I FORWARD -i br-vm2 -o br-vm4 -j DROP
-
-      # VM3 cannot reach VM1, VM2, VM4
-      iptables -I FORWARD -i br-vm3 -o br-vm1 -j DROP
-      iptables -I FORWARD -i br-vm3 -o br-vm2 -j DROP
-      iptables -I FORWARD -i br-vm3 -o br-vm4 -j DROP
-
-      # VM4 cannot reach VM1, VM2, VM3
-      iptables -I FORWARD -i br-vm4 -o br-vm1 -j DROP
-      iptables -I FORWARD -i br-vm4 -o br-vm2 -j DROP
-      iptables -I FORWARD -i br-vm4 -o br-vm3 -j DROP
+${generateIsolationRules}
     '';
   };
 }
