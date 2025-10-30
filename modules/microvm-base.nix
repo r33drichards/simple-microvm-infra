@@ -19,8 +19,8 @@ in
   };
 
   config = {
-    # Use Cloud-Hypervisor (fast, lightweight)
-    microvm.hypervisor = "cloud-hypervisor";
+    # Use Firecracker (fast, lightweight, better networking support)
+    microvm.hypervisor = "firecracker";
 
     # Virtiofs filesystem shares from host
     microvm.shares = [
