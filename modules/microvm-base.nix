@@ -19,8 +19,8 @@ in
   };
 
   config = {
-    # Use Cloud-Hypervisor (fast, lightweight)
-    microvm.hypervisor = "cloud-hypervisor";
+    # Use QEMU (better ARM64 device support)
+    microvm.hypervisor = "qemu";
 
     # Virtiofs filesystem shares from host
     microvm.shares = [
