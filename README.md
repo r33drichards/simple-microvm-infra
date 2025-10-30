@@ -39,7 +39,7 @@ NAT → Internet
 ## Quick Start
 
 **Prerequisites:**
-- NixOS installed on AWS EC2 instance
+- NixOS installed on AWS EC2 ARM instance (or ARM bare metal)
 - Appropriate IAM permissions for EBS volume operations
 - Tailscale account
 
@@ -159,8 +159,8 @@ simple-microvm-infra/
 
 ## Requirements
 
-- **Platform:** AWS EC2 instance (Nitro-based recommended)
-- **Hardware:** x86_64 system with virtualization support (Intel VT-x/AMD-V)
+- **Platform:** AWS EC2 ARM instance or ARM bare metal (Graviton-based recommended)
+- **Hardware:** aarch64-linux system with virtualization support
 - **OS:** NixOS 24.05 or later
 - **IAM Permissions:** EC2 volume operations (create, attach, describe, tag)
 - **Network:** Tailscale account for remote access

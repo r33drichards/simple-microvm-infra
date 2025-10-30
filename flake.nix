@@ -20,7 +20,7 @@
     nixosConfigurations = {
       # Hypervisor (physical host)
       hypervisor = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
+        system = "aarch64-linux";
         modules = [
           microvm.nixosModules.host  # Enable MicroVM host support
           ./hosts/hypervisor
