@@ -15,6 +15,26 @@
     ../../modules/ebs-volume
   ];
 
+  # Nix settings
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
+
+  nix.trustedUsers = [
+    "root"
+    "@wheel"
+  ];
+
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 7d";
+  };
+
+  # Allow unfree packages
+  nixpkgs.config.allowUnfree = true;
+
   networking.hostName = "hypervisor";
 
   # ZFS support
@@ -28,6 +48,20 @@
   # Tailscale for remote access and subnet routing
   services.tailscale.enable = true;
 
+  # Environment configuration
+  environment.variables = {
+    EDITOR = "nvim";
+  };
+
+  environment.shellAliases = {
+    "ccode" = "npx -y @anthropic-ai/claude-code --dangerously-skip-permissions";
+  };
+
+  # Program configurations
+  programs.neovim.enable = true;
+  programs.neovim.defaultEditor = true;
+  programs.direnv.enable = true;
+
   # Basic system tools
   environment.systemPackages = with pkgs; [
     vim
@@ -36,6 +70,9 @@
     tmux
     curl
     wget
+    nodejs
+    claude-code
+    gh  # GitHub CLI for Flux bootstrap
   ];
 
   # SSH with key-only auth
@@ -44,11 +81,15 @@
     settings = {
       PermitRootLogin = "prohibit-password";
       PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
     };
   };
 
-  # Allow wheel group to sudo without password (convenience)
+  # Sudo configuration
   security.sudo.wheelNeedsPassword = false;
+  security.sudo.extraConfig = ''
+    robertwendt ALL=(ALL) NOPASSWD:ALL
+  '';
 
   # Create an admin user (customize as needed)
   users.users.admin = {
@@ -56,6 +97,15 @@
     extraGroups = [ "wheel" "networkmanager" ];
     # Add your SSH public key here:
     # openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA..." ];
+  };
+
+  # Additional user: robertwendt
+  users.users.robertwendt = {
+    isNormalUser = true;
+    extraGroups = [ "wheel" "podman" ];
+    openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
+    ];
   };
 
   # EBS volume management with ZFS
