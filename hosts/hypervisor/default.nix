@@ -10,6 +10,9 @@
 
     # Network bridges, NAT, firewall
     ./network.nix
+
+    # VM5 network restrictions (GitHub + AWS only)
+    ../../modules/vm5-restricted-network.nix
   ];
 
   # Nix settings
