@@ -35,16 +35,19 @@ in
 {
   # Create isolated bridges dynamically from networks.nix
   # Each bridge has no physical interfaces attached (pure virtual)
-  networking.bridges = lib.mapAttrs (_: _: { interfaces = []; })
-    (lib.mapAttrs (_: net: net.bridge) networks.networks);
+  networking.bridges = lib.mapAttrs' (name: net:
+    lib.nameValuePair net.bridge { interfaces = []; }
+  ) networks.networks;
 
   # Assign gateway IPs to bridges (host side gets .1 in each subnet)
-  networking.interfaces = lib.mapAttrs (_: net: {
-    ipv4.addresses = [{
-      address = "${net.subnet}.1";
-      prefixLength = 24;
-    }];
-  }) networks.networks;
+  networking.interfaces = lib.mapAttrs' (name: net:
+    lib.nameValuePair net.bridge {
+      ipv4.addresses = [{
+        address = "${net.subnet}.1";
+        prefixLength = 24;
+      }];
+    }
+  ) networks.networks;
 
   # Enable IP forwarding (required for NAT)
   boot.kernel.sysctl = {
