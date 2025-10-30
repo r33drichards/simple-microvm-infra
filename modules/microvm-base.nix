@@ -22,6 +22,10 @@ in
     # Use QEMU (better ARM64 device support)
     microvm.hypervisor = "qemu";
 
+    # Kernel modules for virtio devices (required for ARM64)
+    boot.kernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
+    boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
+
     # Virtiofs filesystem shares from host
     microvm.shares = [
       {
@@ -51,14 +55,16 @@ in
     # Enable systemd-networkd for network config
     systemd.network.enable = true;
 
-    # Configure eth0 with static IP
-    systemd.network.networks."10-eth0" = {
-      matchConfig.Name = "eth0";
+    # Configure first ethernet interface with static IP
+    # Match by type instead of name for flexibility
+    systemd.network.networks."10-lan" = {
+      matchConfig.Type = "ether";
       networkConfig = {
         # VM gets .2 in its subnet (gateway is .1 on host)
         Address = "${vmNetwork.subnet}.2/24";
         Gateway = "${vmNetwork.subnet}.1";
         DNS = "1.1.1.1";  # Cloudflare DNS
+        DHCP = "no";
       };
     };
 
