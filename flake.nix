@@ -20,9 +20,25 @@
       # Each VM gets its own isolated network (10.X.0.0/24)
       vms = {
         vm1 = {
-          # Optional: customize per VM
-          # modules = [ ./path/to/custom.nix ];
-          # packages = with pkgs; [ git docker ];
+          # Docker-enabled VM with sandbox container
+          modules = [
+            {
+              virtualisation.oci-containers = {
+                backend = "docker";
+                containers = {
+                  sandbox = {
+                    image = "wholelottahoopla/sandbox:latest";
+                    autoStart = true;
+                    ports = [ "0.0.0.0:8080:8080" ];
+                    # Add environment variables if needed:
+                    # environment = {
+                    #   KEY = "value";
+                    # };
+                  };
+                };
+              };
+            }
+          ];
         };
         vm2 = { };
         vm3 = { };
