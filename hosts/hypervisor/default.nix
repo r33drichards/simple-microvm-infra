@@ -71,7 +71,7 @@
     curl
     wget
     nodejs
-    gh  # GitHub CLI for Flux bootstrap
+    ghomit 
   ];
 
   # SSH with key-only auth
