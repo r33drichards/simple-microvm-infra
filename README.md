@@ -1,17 +1,18 @@
 # Simple MicroVM Infrastructure
 
-A minimal, production-ready template for running 4 isolated NixOS MicroVMs on a single hypervisor.
+A minimal, production-ready template for running 5 isolated NixOS MicroVMs on a single hypervisor.
 
 ## Overview
 
 This project provides a simplified version of enterprise MicroVM infrastructure, designed as a learning template that teams can fork and expand. It demonstrates core production patterns while maintaining clarity and simplicity.
 
 **Key Features:**
-- 4 completely isolated MicroVMs on NixOS hypervisor
+- 5 completely isolated MicroVMs on NixOS hypervisor (3 vCPU, 6GB RAM each)
 - Each VM on separate IPv4 subnet with internet access
 - Accessible via Tailscale subnet routing
 - Shared /nix/store for 90% disk space savings
-- Simple filesystem storage on root volume
+- Declarative VM definitions with easy customization
+- DRY configuration with automatic generation
 - Clean, minimal codebase with zero cruft
 
 ## Architecture
@@ -21,11 +22,11 @@ External Client (via Tailscale)
     ↓
 Tailscale on Host
     ↓
-Host Bridges (4 isolated: br-vm1, br-vm2, br-vm3, br-vm4)
+Host Bridges (5 isolated: br-vm1, br-vm2, br-vm3, br-vm4, br-vm5)
     ↓
-TAP Interfaces
+TAP Interfaces (dynamically managed)
     ↓
-MicroVMs (10.1.0.2, 10.2.0.2, 10.3.0.2, 10.4.0.2)
+MicroVMs (10.1.0.2, 10.2.0.2, 10.3.0.2, 10.4.0.2, 10.5.0.2)
     ↓
 NAT → Internet
 ```
@@ -35,6 +36,11 @@ NAT → Internet
 - ✓ VMs accessible via Tailscale subnet routes
 - ✗ VMs cannot communicate with each other
 - ✗ VMs cannot bypass isolation
+
+**VM Resources (per VM):**
+- 3 vCPUs
+- 6GB RAM
+- Configurable via centralized `modules/vm-resources.nix`
 
 ## Quick Start
 
@@ -63,10 +69,10 @@ nixos-rebuild switch --flake .#hypervisor
 # No reboot required!
 
 # Start VMs
-microvm -u vm1 vm2 vm3 vm4
+microvm -u vm1 vm2 vm3 vm4 vm5
 
 # Configure Tailscale
-tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24
+tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24,10.5.0.0/24
 # Approve routes in Tailscale admin console
 ```
 
@@ -85,29 +91,36 @@ ssh root@10.1.0.2
 ```
 simple-microvm-infra/
 ├── docs/
-│   ├── DEPLOYMENT.md   # Step-by-step deployment guide
-│   ├── TESTING.md      # Testing and validation guide
-│   └── plans/          # Design documentation
-├── hosts/              # VM configurations
-│   ├── hypervisor/     # Physical host config
-│   ├── vm1/            # VM1: 10.1.0.0/24
-│   ├── vm2/            # VM2: 10.2.0.0/24
-│   ├── vm3/            # VM3: 10.3.0.0/24
-│   └── vm4/            # VM4: 10.4.0.0/24
-├── modules/            # Reusable NixOS modules
-│   ├── ebs-volume/     # EBS volume management with ZFS
-│   ├── microvm-base.nix   # Shared MicroVM config
-│   └── networks.nix       # Network topology
-├── lib/                # Helper functions
-│   └── default.nix     # microvmSystem builder
-└── flake.nix          # Main entry point
+│   ├── DEPLOYMENT.md          # Step-by-step deployment guide
+│   ├── TESTING.md             # Testing and validation guide
+│   ├── vm-customization.md    # VM customization examples
+│   └── plans/                 # Design documentation
+├── hosts/
+│   └── hypervisor/            # Physical host config
+├── modules/                   # Reusable NixOS modules
+│   ├── ebs-volume/            # EBS volume management with ZFS
+│   ├── microvm-base.nix       # Shared MicroVM config
+│   ├── networks.nix           # Network topology definitions
+│   └── vm-resources.nix       # Centralized CPU/RAM defaults
+├── lib/                       # Helper functions
+│   ├── default.nix            # microvmSystem builder
+│   └── create-vm.nix          # VM factory function
+└── flake.nix                  # Main entry point + VM definitions
 ```
+
+**Key Configuration Files:**
+- `flake.nix` - Define all VMs in one place with the `vms` attrset
+- `modules/networks.nix` - Network topology for all VMs
+- `modules/vm-resources.nix` - Default CPU and RAM allocation
+- `lib/create-vm.nix` - Factory function for DRY VM creation
 
 ## Documentation
 
 **📘 [Deployment Guide](docs/DEPLOYMENT.md)** - Step-by-step deployment instructions
 
 **🧪 [Testing Guide](docs/TESTING.md)** - Validation and testing procedures
+
+**⚙️ [VM Customization Guide](docs/vm-customization.md)** - How to customize individual VMs
 
 **📐 [Design Document](docs/plans/2025-10-31-minimal-microvm-infrastructure-design.md)** - Complete architecture specification
 
@@ -119,6 +132,7 @@ simple-microvm-infra/
 - Complete architecture and network topology
 - Storage design with ZFS and virtiofs
 - Deployment process and daily operations
+- VM customization patterns
 - Testing and validation procedures
 - Design decisions and trade-offs
 - Future extension paths
@@ -135,10 +149,37 @@ simple-microvm-infra/
 - Simple filesystem storage (not ZFS)
 - No secrets management (plain config)
 - IPv4 only (not dual-stack)
-- 4 VMs (not 29)
+- 5 VMs (not 29)
 - Minimal dependencies
+- DRY configuration with automatic generation
 
 **Result:** Every line of code has clear, obvious purpose.
+
+## Adding VMs
+
+Adding new VMs is extremely simple thanks to the DRY architecture:
+
+1. **Add VM to flake.nix:**
+   ```nix
+   vms = {
+     vm1 = { };
+     vm2 = { };
+     vm6 = { };  # New VM
+   };
+   ```
+
+2. **Add network definition to modules/networks.nix:**
+   ```nix
+   vm6 = { subnet = "10.6.0"; bridge = "br-vm6"; };
+   ```
+
+That's it! The infrastructure automatically generates:
+- Bridge configuration
+- IP addressing
+- NAT rules
+- Firewall isolation rules
+
+See [VM Customization Guide](docs/vm-customization.md) for advanced customization options.
 
 ## Use Cases
 
