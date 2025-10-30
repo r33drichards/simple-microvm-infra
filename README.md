@@ -81,26 +81,39 @@ ssh root@10.1.0.2
 
 ```
 simple-microvm-infra/
-├── docs/plans/          # Design documentation
-├── hosts/               # VM configurations (coming soon)
+├── docs/
+│   ├── DEPLOYMENT.md   # Step-by-step deployment guide
+│   ├── TESTING.md      # Testing and validation guide
+│   └── plans/          # Design documentation
+├── hosts/              # VM configurations
 │   ├── hypervisor/     # Physical host config
 │   ├── vm1/            # VM1: 10.1.0.0/24
 │   ├── vm2/            # VM2: 10.2.0.0/24
 │   ├── vm3/            # VM3: 10.3.0.0/24
 │   └── vm4/            # VM4: 10.4.0.0/24
 ├── modules/            # Reusable NixOS modules
+│   ├── microvm-base.nix   # Shared MicroVM config
+│   └── networks.nix       # Network topology
 ├── lib/                # Helper functions
+│   └── default.nix     # microvmSystem builder
 └── flake.nix          # Main entry point
 ```
 
 ## Documentation
 
-**Full design document:** [docs/plans/2025-10-31-minimal-microvm-infrastructure-design.md](docs/plans/2025-10-31-minimal-microvm-infrastructure-design.md)
+**📘 [Deployment Guide](docs/DEPLOYMENT.md)** - Step-by-step deployment instructions
+
+**🧪 [Testing Guide](docs/TESTING.md)** - Validation and testing procedures
+
+**📐 [Design Document](docs/plans/2025-10-31-minimal-microvm-infrastructure-design.md)** - Complete architecture specification
+
+**📋 [Implementation Plan](docs/plans/IMPLEMENTATION-PLAN.md)** - Detailed task breakdown used to build this project
 
 **What's documented:**
 - Complete architecture and network topology
 - Storage design with ZFS and virtiofs
 - Deployment process and daily operations
+- Testing and validation procedures
 - Design decisions and trade-offs
 - Future extension paths
 
@@ -148,11 +161,12 @@ simple-microvm-infra/
 
 ## Status
 
-🚧 **In Development**
+✅ **Ready to Deploy**
 
 - ✅ Design complete
-- ⏳ Implementation in progress
-- ⏳ Testing and documentation
+- ✅ Implementation complete (~1000 LOC)
+- ✅ Documentation complete
+- 📦 Ready for deployment on NixOS hypervisor
 
 ## Contributing
 
