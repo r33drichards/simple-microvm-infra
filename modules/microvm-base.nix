@@ -27,6 +27,9 @@ in
     # Use QEMU (better ARM64 device support)
     microvm.hypervisor = "qemu";
 
+    # Use virtiofs sharing from host instead of creating disk image
+    microvm.storeOnDisk = false;
+
     # Default resource allocation (can be overridden by individual VMs)
     microvm.vcpu = lib.mkDefault config.vmDefaults.vcpu;
     microvm.mem = lib.mkDefault config.vmDefaults.mem;
@@ -36,9 +39,14 @@ in
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
     # Virtiofs filesystem shares from host
-    # Note: /nix/store is automatically shared when writableStoreOverlay is set
-    # microvm.nix handles this internally
-    microvm.shares = [];
+    # Share /nix/store from host (read-only, space-efficient)
+    # When writableStoreOverlay is set, this becomes the lower layer of the overlay
+    microvm.shares = [{
+      source = "/nix/store";
+      mountPoint = "/nix/.ro-store";
+      tag = "ro-store";
+      proto = "virtiofs";
+    }];
 
     # Dedicated disk volumes per VM (virtio-blk for performance)
     # /var is ephemeral (in-memory tmpfs), all persistent data goes to /mnt/storage
