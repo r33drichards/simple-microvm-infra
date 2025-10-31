@@ -495,6 +495,69 @@ VMs use static IP configuration rather than DHCP:
 - Insufficient memory
 - Hypervisor not installed
 
+### Problem: Can't Connect to Docker Containers
+
+**Symptoms**: Docker container running and healthy, but connections to exposed ports fail with "Connection reset by peer" or "No route to host".
+
+**Root Cause**: This issue has two parts:
+1. NixOS firewall blocks Docker networking by default
+2. systemd-networkd matches Docker veth interfaces and assigns them incorrect IPs
+
+**Diagnosis**:
+1. Check if firewall allows Docker: `iptables -L nixos-fw -n -v | grep docker`
+2. Check for IP conflicts: `ip a` - look for veth interfaces with the VM's IP
+3. Check docker0 bridge state: `ip a show docker0` - should be UP with carrier
+4. Test direct container IP: `curl http://172.17.0.2:8080` - should get "No route to host" if misconfigured
+
+**Solution**:
+1. **Add firewall rules in flake.nix**:
+   ```nix
+   networking.firewall.trustedInterfaces = [ "docker0" ];
+   networking.firewall.allowedTCPPorts = [ 8080 ];
+   ```
+
+2. **Exclude veth interfaces in modules/microvm-base.nix**:
+   ```nix
+   systemd.network.networks."10-lan" = {
+     matchConfig = {
+       Type = "ether";
+       Name = "!veth*";  # Critical: Exclude Docker veth interfaces
+     };
+     # ... rest of config
+   };
+   ```
+
+**Why This Happens**:
+- NixOS firewall blocks forwarded packets by default
+- systemd-networkd's `Type = "ether"` matches ALL ethernet interfaces, including Docker's veth pairs
+- When veth interfaces get the VM's static IP, routing breaks completely
+- Docker containers can't receive traffic even though they appear healthy
+
+**Verification After Fix**:
+```bash
+# Should show docker0 and port 8080 in firewall
+iptables -L nixos-fw -n -v
+
+# Should NOT show veth with VM IP - only enp0s4 should have it
+ip a | grep "inet 10.1.0.2"
+
+# docker0 should be UP with carrier
+ip a show docker0
+
+# Should work
+curl http://localhost:8080
+```
+
+**Related Commits**:
+- `dc6b0f1` - Add firewall rules for Docker
+- `f13772e` - Exclude veth interfaces from networkd config
+
+**Important Notes**:
+- After configuration changes, VMs must be rebuilt: `nix build .#nixosConfigurations.vm1.config.microvm.declaredRunner`
+- Update VM symlinks: `ln -sf /nix/store/<new-hash>-microvm-qemu-vm1 /var/lib/microvms/vm1/current`
+- Restart the VM: `systemctl restart microvm@vm1`
+- Comin deploys hypervisor changes but doesn't automatically rebuild/restart VMs
+
 ## Performance Characteristics
 
 ### Resource Usage
@@ -561,3 +624,6 @@ Potential improvements to consider:
 - **nftables**: Packet filtering and NAT
 - **TAP/TUN**: Virtual network interfaces
 - **NixOS Flakes**: Hermetic, reproducible configurations
+- ssh locally into the vms, you are connected to tailscale
+- you can inspect aws resources with aws cli, you are logged in
+- nixos-firewall-tool is for imperative fw management in nixos fyi
