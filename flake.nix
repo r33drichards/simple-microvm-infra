@@ -75,7 +75,7 @@
         vm2 = {
           # Remote desktop VM with browser access (Guacamole + XRDP + XFCE)
           modules = [
-            { pkgs, ... }: {
+            ({ pkgs, ... }: {
               # Enable X11 with XFCE desktop environment
               services.xserver = {
                 enable = true;
@@ -89,6 +89,8 @@
               services.displayManager.defaultSession = "xfce";
 
               # Enable XRDP server (RDP backend for remote desktop)
+              # Note: Guacamole removed due to lack of ARM64 support
+              # Access via: RDP client to 10.2.0.2:3389 (via Tailscale)
               services.xrdp = {
                 enable = true;
                 defaultWindowManager = "startxfce4";
@@ -96,37 +98,8 @@
                 port = 3389;
               };
 
-              # Apache Guacamole for browser-based access
-              services.guacamole-server = {
-                enable = true;
-                host = "127.0.0.1";
-                port = 4822;
-                userMappingXml = pkgs.writeText "user-mapping.xml" ''
-                  <user-mapping>
-                    <authorize username="admin" password="admin">
-                      <connection name="VM2 Desktop">
-                        <protocol>rdp</protocol>
-                        <param name="hostname">localhost</param>
-                        <param name="port">3389</param>
-                        <param name="username">robertwendt</param>
-                        <param name="ignore-cert">true</param>
-                      </connection>
-                    </authorize>
-                  </user-mapping>
-                '';
-              };
-
-              services.guacamole-client = {
-                enable = true;
-                enableWebserver = true;
-                settings = {
-                  guacd-hostname = "127.0.0.1";
-                  guacd-port = 4822;
-                };
-              };
-
-              # Open firewall for Guacamole web interface
-              networking.firewall.allowedTCPPorts = [ 8080 ];
+              # Open firewall for RDP
+              networking.firewall.allowedTCPPorts = [ 3389 ];
 
               # Install desktop utilities
               environment.systemPackages = with pkgs; [
@@ -144,8 +117,7 @@
                   xfce.xfce4-session
                 ];
               };
-            }
-          }
+            })
           ];
         };
         vm3 = { };
