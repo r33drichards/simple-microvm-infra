@@ -37,6 +37,10 @@
               # Enable Docker
               virtualisation.docker.enable = true;
 
+              # Allow Docker networking through NixOS firewall
+              networking.firewall.trustedInterfaces = [ "docker0" ];
+              networking.firewall.allowedTCPPorts = [ 8080 ];
+
               virtualisation.oci-containers = {
                 backend = "docker";
                 containers = {
