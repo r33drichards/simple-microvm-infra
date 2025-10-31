@@ -36,16 +36,8 @@ in
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
     # Virtiofs filesystem shares from host
-    microvm.shares = [
-      {
-        # Shared /nix/store (read-only, massive space savings)
-        source = "/nix/store";
-        mountPoint = "/nix/.ro-store";
-        tag = "ro-store";
-        proto = "virtiofs";
-      }
-      # /var removed - using virtio-blk volume instead for better performance
-    ];
+    # Removed shared /nix/store - each VM has its own complete store
+    microvm.shares = [ ];
 
     # Dedicated disk volumes per VM (virtio-blk for performance)
     # /var is ephemeral (in-memory tmpfs), all persistent data goes to /mnt/storage
