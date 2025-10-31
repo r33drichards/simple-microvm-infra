@@ -73,9 +73,12 @@ in
     systemd.network.enable = true;
 
     # Configure first ethernet interface with static IP
-    # Match by type instead of name for flexibility
+    # Match by type but exclude Docker veth interfaces
     systemd.network.networks."10-lan" = {
-      matchConfig.Type = "ether";
+      matchConfig = {
+        Type = "ether";
+        Name = "!veth*";  # Exclude Docker veth interfaces
+      };
       networkConfig = {
         # VM gets .2 in its subnet (gateway is .1 on host)
         Address = "${vmNetwork.subnet}.2/24";
