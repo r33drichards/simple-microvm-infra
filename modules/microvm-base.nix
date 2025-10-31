@@ -38,10 +38,14 @@ in
     boot.kernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
-    # Disable systemd in initrd to prevent mount unit overrides that break writable overlay
-    # microvm.nix creates systemd.mounts overrides when boot.initrd.systemd.enable = true
-    # which conflicts with writableStoreOverlay
-    boot.initrd.systemd.enable = false;
+    # Enable systemd in initrd (required for impermanence module)
+    boot.initrd.systemd.enable = true;
+
+    # Override microvm.nix's mount unit to not interfere with the overlay
+    # microvm.nix adds a systemd.mounts entry when systemd in initrd is enabled
+    # that sets What=store which overrides the overlay mount
+    # We override it to be empty so the overlay mount from fileSystems takes precedence
+    systemd.mounts = lib.mkForce [];
 
     # Virtiofs filesystem shares from host
     # Share /nix/store from host (read-only, space-efficient)
