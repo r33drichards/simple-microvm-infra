@@ -53,6 +53,24 @@ in
       }
     ];
 
+    # Dedicated 64GB disk volume per VM
+    microvm.volumes = [
+      {
+        # Path to disk image on host
+        image = "/var/lib/microvms/${config.networking.hostName}/data.img";
+        # 64GB = 65536 MiB
+        size = 65536;
+        # Auto-create the disk image if it doesn't exist
+        autoCreate = true;
+        # Filesystem type
+        fsType = "ext4";
+        # Mount point inside the VM
+        mountPoint = "/mnt/storage";
+        # Disk label for easy identification
+        label = "${config.networking.hostName}-data";
+      }
+    ];
+
     # TAP network interface
     microvm.interfaces = [{
       type = "tap";
