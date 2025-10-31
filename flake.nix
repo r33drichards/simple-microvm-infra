@@ -72,7 +72,77 @@
             }
           ];
         };
-        vm2 = { };
+        vm2 = {
+          # Remote desktop VM with browser access (Guacamole + XRDP + XFCE)
+          modules = [
+            {
+              # Enable X11 with XFCE desktop environment
+              services.xserver = {
+                enable = true;
+                desktopManager = {
+                  xterm.enable = false;
+                  xfce.enable = true;
+                };
+              };
+
+              # Set default session to XFCE
+              services.displayManager.defaultSession = "xfce";
+
+              # Enable XRDP server (RDP backend for remote desktop)
+              services.xrdp = {
+                enable = true;
+                defaultWindowManager = "startxfce4";
+                openFirewall = false;  # We'll manage firewall manually
+                port = 3389;
+              };
+
+              # Apache Guacamole for browser-based access
+              services.guacamole-server = {
+                enable = true;
+                host = "127.0.0.1";
+                port = 4822;
+                userMappingXml = pkgs.writeText "user-mapping.xml" ''
+                  <user-mapping>
+                    <authorize username="admin" password="admin">
+                      <connection name="VM2 Desktop">
+                        <protocol>rdp</protocol>
+                        <param name="hostname">localhost</param>
+                        <param name="port">3389</param>
+                        <param name="username">robertwendt</param>
+                        <param name="ignore-cert">true</param>
+                      </connection>
+                    </authorize>
+                  </user-mapping>
+                '';
+              };
+
+              services.guacamole-client = {
+                enable = true;
+                enableWebserver = true;
+                settings = {
+                  guacd-hostname = "127.0.0.1";
+                  guacd-port = 4822;
+                };
+              };
+
+              # Open firewall for Guacamole web interface
+              networking.firewall.allowedTCPPorts = [ 8080 ];
+
+              # Install desktop utilities
+              environment.systemPackages = with pkgs; [
+                firefox
+                xfce.thunar
+                xfce.xfce4-terminal
+              ];
+
+              # Ensure robertwendt user can login via RDP
+              users.users.robertwendt.packages = with pkgs; [
+                xfce.xfce4-panel
+                xfce.xfce4-session
+              ];
+            }
+          ];
+        };
         vm3 = { };
         vm4 = { };
         vm5 = { };
