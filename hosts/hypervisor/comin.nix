@@ -13,6 +13,8 @@
 
       branches.main = {
         name = "main";
+        # Tell Comin which NixOS configuration to deploy
+        nixosConfiguration = "hypervisor";
       };
     }];
 

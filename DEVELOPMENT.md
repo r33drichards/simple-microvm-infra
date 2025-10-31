@@ -4,7 +4,18 @@ This document describes the development workflow for working with the MicroVM in
 
 ## Overview
 
-This infrastructure uses NixOS flakes to declaratively manage a hypervisor and 4 isolated MicroVMs. Changes are made by editing Nix configuration files, committing to git, and deploying to the remote hypervisor.
+This infrastructure uses NixOS flakes to declaratively manage a hypervisor and 5 isolated MicroVMs. Changes are made by editing Nix configuration files and committing to git. **Comin automatically deploys changes** to the hypervisor within 60 seconds.
+
+## Automated GitOps Deployment
+
+**Comin** runs on the hypervisor and automatically:
+1. Polls the GitHub repository every 60 seconds
+2. Detects new commits on the `main` branch
+3. Builds the new NixOS configuration
+4. Deploys changes atomically
+5. Restarts affected services (including VMs when needed)
+
+**You only need to commit and push.** Deployment happens automatically!
 
 ## Development Cycle
 
@@ -21,9 +32,9 @@ Common files to modify:
 - `modules/microvm-base.nix` - Configuration shared by all VMs
 - `hosts/hypervisor/default.nix` - Hypervisor host configuration
 - `hosts/hypervisor/network.nix` - Network bridges and routing
-- `hosts/vm1/default.nix` through `hosts/vm4/default.nix` - Per-VM configuration
+- `flake.nix` - VM definitions and configuration
 
-### 2. Commit Changes
+### 2. Commit and Push Changes
 
 ```bash
 git add .
@@ -31,29 +42,40 @@ git commit -m "Description of changes"
 git push
 ```
 
-### 3. Deploy to Hypervisor
+**That's it!** Comin will automatically deploy within 60 seconds.
 
-Pull changes and rebuild VMs on the remote hypervisor:
+### 3. Monitor Deployment (Optional)
+
+Watch Comin deploy your changes:
+
+```bash
+# Watch Comin service status
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
+  "journalctl -u comin -f"
+
+# Check deployment status
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
+  "systemctl status comin"
+
+# Check if VMs are running
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
+  "systemctl list-units 'microvm@*'"
+```
+
+### 4. Manual Deployment (If Needed)
+
+If you need to deploy immediately without waiting for Comin:
 
 ```bash
 ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
   "cd simple-microvm-infra && git pull && microvm -u vm1 vm2 vm3 vm4 vm5"
 ```
 
-### 4. Restart VMs (if needed)
-
-If the microvm command indicates a restart is needed:
+Or rebuild the entire hypervisor:
 
 ```bash
 ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
-  "systemctl restart microvm@vm1 microvm@vm2 microvm@vm3 microvm@vm4"
-```
-
-Or use the `-R` flag with microvm to auto-restart:
-
-```bash
-ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
-  "cd simple-microvm-infra && microvm -Ru vm1 vm2 vm3 vm4 vm5"
+  "cd simple-microvm-infra && git pull && nixos-rebuild switch --flake .#hypervisor"
 ```
 
 ## Common Development Tasks
