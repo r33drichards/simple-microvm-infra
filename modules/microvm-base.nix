@@ -48,18 +48,10 @@ in
     ];
 
     # Dedicated disk volumes per VM (virtio-blk for performance)
+    # /var is ephemeral (in-memory tmpfs), all persistent data goes to /mnt/storage
     microvm.volumes = [
       {
-        # /var volume - persistent VM state, logs, and application data
-        image = "/var/lib/microvms/${config.networking.hostName}/var.img";
-        size = 10240;  # 10GB for /var
-        autoCreate = true;
-        fsType = "ext4";
-        mountPoint = "/var";
-        label = "${config.networking.hostName}-var";
-      }
-      {
-        # Data volume - for databases, Docker, large files
+        # Data volume - for databases, Docker, large files, and any persistent application data
         image = "/var/lib/microvms/${config.networking.hostName}/data.img";
         size = 65536;  # 64GB
         autoCreate = true;
@@ -96,6 +88,12 @@ in
     # Basic system settings
     time.timeZone = "UTC";
     i18n.defaultLocale = "en_US.UTF-8";
+
+    # Configure journald for volatile storage (since /var is ephemeral)
+    services.journald.extraConfig = ''
+      Storage=volatile
+      RuntimeMaxUse=100M
+    '';
 
     # Allow root login with password (for learning/setup)
     # CHANGE THIS in production!

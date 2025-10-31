@@ -10,7 +10,7 @@ This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and 
 - **Operating System**: NixOS 25.05 with flakes
 - **Hypervisor**: QEMU (chosen for ARM64 virtio device support)
 - **Network Isolation**: Each VM has its own isolated bridge network
-- **Storage**: Shared read-only `/nix/store`, per-VM writable `/var`
+- **Storage**: Shared read-only `/nix/store`, ephemeral `/var`, persistent 64GB `/mnt/storage` per VM
 - **Remote Access**: Tailscale VPN with subnet routing
 - **Deployment**: GitOps automation via Comin (pull-based, automatic)
 
@@ -96,14 +96,15 @@ All VMs share the hypervisor's `/nix/store` via virtiofs:
 - **Access**: Read-only
 - **Benefits**: Massive space savings (no duplication of packages)
 
-### Per-VM /var
+### Ephemeral /var
 
-Each VM has its own writable storage:
-- **Host Path**: `/var/lib/microvms/<vmname>/var`
+Each VM has an ephemeral `/var` directory:
+- **Storage**: In-memory tmpfs (lost on reboot)
 - **Mount Point**: `/var` in guest
-- **Protocol**: virtiofs
+- **Protocol**: tmpfs (RAM-based filesystem)
 - **Access**: Read-write
-- **Contents**: Logs, state files, databases, etc.
+- **Contents**: Temporary logs, runtime state, caches
+- **Journald**: Configured for volatile storage (logs kept in memory, max 100MB)
 
 ### Per-VM Dedicated Storage (64GB)
 
@@ -125,9 +126,10 @@ Each VM has a dedicated 64GB disk volume:
 This hybrid approach combines the best of both worlds:
 - **Efficiency**: No duplication of /nix/store across VMs (virtiofs)
 - **Speed**: Fast boot times with shared read-only store
-- **Isolation**: Each VM gets dedicated 64GB storage
-- **Performance**: Block device for high-performance I/O workloads
-- **Flexibility**: Small files in /var (virtiofs), large data in /mnt/storage (virtio-blk)
+- **Simplicity**: Ephemeral /var reduces complexity and ensures clean VM state on each boot
+- **Isolation**: Each VM gets dedicated 64GB persistent storage at `/mnt/storage`
+- **Performance**: Block device (virtio-blk) for high-performance I/O workloads
+- **Immutability**: VMs start fresh on reboot, aligning with immutable infrastructure principles
 
 ## Hypervisor Selection: QEMU
 
