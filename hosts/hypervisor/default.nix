@@ -64,6 +64,7 @@
     wget
     nodejs
     jq
+    awscli2  # For fetching AWS Secrets Manager secrets
   ];
 
   # SSH with key-only auth
@@ -136,11 +137,47 @@
   systemd.tmpfiles.rules = [
     "d /var/lib/microvms 0755 root root -"
     "d /var/lib/microvms/vm1 0755 root root -"
+    "d /var/lib/microvms/vm1/secrets 0700 root root -"  # Secrets directory for VM1
     "d /var/lib/microvms/vm2 0755 root root -"
     "d /var/lib/microvms/vm3 0755 root root -"
     "d /var/lib/microvms/vm4 0755 root root -"
     "d /var/lib/microvms/vm5 0755 root root -"
   ];
+
+  # Fetch AWS Secrets Manager secrets on hypervisor (has IAM role)
+  # and make them available to VMs via virtiofs shares
+  systemd.services.fetch-vm1-secrets = {
+    description = "Fetch secrets from AWS Secrets Manager for VM1";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "microvm@vm1.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -euo pipefail
+
+      SECRET_NAME="bmnixos"
+      REGION="us-west-2"
+      ENV_FILE="/var/lib/microvms/vm1/secrets/sandbox.env"
+
+      echo "Fetching secret from AWS Secrets Manager..."
+      SECRET_JSON=$(${pkgs.awscli2}/bin/aws secretsmanager get-secret-value \
+        --secret-id "$SECRET_NAME" \
+        --region "$REGION" \
+        --query SecretString \
+        --output text)
+
+      # Parse JSON and write to env file
+      echo "Writing environment variables to $ENV_FILE..."
+      echo "$SECRET_JSON" | ${pkgs.jq}/bin/jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > "$ENV_FILE"
+
+      # Secure the file
+      chmod 600 "$ENV_FILE"
+
+      echo "Successfully fetched and wrote secrets to $ENV_FILE"
+    '';
+  };
 
   # Systemd services to add TAP interfaces to bridges when VMs start
   systemd.services."microvm-bridge-vm1" = {
