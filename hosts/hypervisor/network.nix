@@ -66,6 +66,23 @@ in
 
     # VM bridges that should be NAT'd (generated from networks.nix)
     internalInterfaces = bridges;
+
+    # Forward AWS Instance Metadata Service (IMDS) requests from VMs
+    # This allows VMs to access EC2 instance role credentials
+    extraCommands = ''
+      # IMDS is at 169.254.169.254 on the hypervisor
+      # Forward requests from VMs (10.0.0.0/8) to hypervisor's IMDS
+      iptables -t nat -A PREROUTING -s 10.0.0.0/8 -d 169.254.169.254 -p tcp -m tcp --dport 80 -j DNAT --to-destination 169.254.169.254:80
+
+      # Masquerade source IP so IMDS sees requests as coming from hypervisor
+      iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -d 169.254.169.254 -j MASQUERADE
+    '';
+
+    extraStopCommands = ''
+      # Clean up IMDS forwarding rules on service stop
+      iptables -t nat -D PREROUTING -s 10.0.0.0/8 -d 169.254.169.254 -p tcp -m tcp --dport 80 -j DNAT --to-destination 169.254.169.254:80 2>/dev/null || true
+      iptables -t nat -D POSTROUTING -s 10.0.0.0/8 -d 169.254.169.254 -j MASQUERADE 2>/dev/null || true
+    '';
   };
 
   # Firewall configuration
