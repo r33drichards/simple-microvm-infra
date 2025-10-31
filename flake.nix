@@ -75,7 +75,7 @@
         vm2 = {
           # Remote desktop VM with browser access (Guacamole + XRDP + XFCE)
           modules = [
-            {
+            { pkgs, ... }: {
               # Enable X11 with XFCE desktop environment
               services.xserver = {
                 enable = true;
@@ -145,6 +145,7 @@
                 ];
               };
             }
+          }
           ];
         };
         vm3 = { };
