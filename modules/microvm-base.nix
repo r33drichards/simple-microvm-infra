@@ -36,16 +36,8 @@ in
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
     # Virtiofs filesystem shares from host
-    microvm.shares = [
-      {
-        # Shared /nix/store (read-only, massive space savings)
-        source = "/nix/store";
-        mountPoint = "/nix/.ro-store";
-        tag = "ro-store";
-        proto = "virtiofs";
-      }
-      # /var removed - using virtio-blk volume instead for better performance
-    ];
+    # Removed shared /nix/store - each VM has its own complete store
+    microvm.shares = [ ];
 
     # Dedicated disk volumes per VM (virtio-blk for performance)
     # /var is ephemeral (in-memory tmpfs), all persistent data goes to /mnt/storage
@@ -102,6 +94,9 @@ in
     time.timeZone = "UTC";
     i18n.defaultLocale = "en_US.UTF-8";
 
+    # Enable Nix experimental features for user-level package management
+    nix.settings.experimental-features = [ "nix-command" "flakes" ];
+
     # Configure journald for volatile storage (since /var is ephemeral)
     services.journald.extraConfig = ''
       Storage=volatile
@@ -111,6 +106,10 @@ in
     # Ensure persist directory exists before impermanence tries to use it
     systemd.tmpfiles.rules = [
       "d /mnt/storage/persist 0755 root root -"
+      "d /nix/var/nix/profiles 0755 root root -"
+      "d /nix/var/nix/gcroots 0755 root root -"
+      "d /nix/var/nix/temproots 0755 root root -"
+      "d /nix/var/nix/db 0755 root root -"
     ];
 
     # Impermanence: Define what persists to /mnt/storage/persist
@@ -128,6 +127,12 @@ in
 
         # Network configuration
         "/var/lib/dhcpcd"            # DHCP client state (if used)
+
+        # Nix user profiles (for nix profile install)
+        "/nix/var/nix/profiles"
+        "/nix/var/nix/gcroots"
+        "/nix/var/nix/temproots"
+        "/nix/var/nix/db"
       ];
 
       files = [
@@ -149,9 +154,11 @@ in
           "Downloads"
           ".ssh"
           { directory = ".local/share"; mode = "0700"; }
+          ".nix-defexpr"
         ];
         files = [
           ".bash_history"
+          { file = ".nix-profile"; parentDirectory = { mode = "0755"; }; }
         ];
       };
     };

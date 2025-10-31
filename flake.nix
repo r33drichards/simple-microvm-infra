@@ -41,6 +41,9 @@
               networking.firewall.trustedInterfaces = [ "docker0" ];
               networking.firewall.allowedTCPPorts = [ 8080 ];
 
+              # Install AWS CLI
+              environment.systemPackages = [ nixpkgs.legacyPackages.aarch64-linux.awscli2 ];
+
               # Mount secrets directory from hypervisor via virtiofs
               # Secrets are fetched on hypervisor (which has AWS credentials)
               microvm.shares = [
