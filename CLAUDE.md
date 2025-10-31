@@ -254,6 +254,70 @@ microvm -r vm1              # Run VM in foreground
 - Network assignment (which subnet)
 - VM-specific packages/services
 
+## Services
+
+### Docker Sandbox (VM1)
+
+VM1 runs a Docker sandbox service managed by systemd:
+
+**Service Details**:
+- **Service Name**: `docker-sandbox.service`
+- **Image**: `wholelottahoopla/sandbox:latest`
+- **Port**: 8080 (exposed on VM1 IP: 10.1.0.2:8080)
+- **Access**: Available via Tailscale VPN from any device on the Tailnet
+- **Pull Policy**: `--pull missing` (pulls if not present locally)
+- **Management**: Systemd service with journald logging
+
+**Architecture**:
+```
+Local Machine (Tailscale) ─────► 10.1.0.2:8080 (VM1)
+                                       │
+                                       ▼
+                              docker-sandbox.service
+                                       │
+                                       ▼
+                           wholelottahoopla/sandbox:latest
+```
+
+**Key Characteristics**:
+- **Managed Service**: Runs as systemd service, automatically starts on VM boot
+- **Container Isolation**: Docker container provides isolated execution environment
+- **Network Access**: Accessible from any Tailscale-connected device
+- **Logging**: All container output logged to journald
+- **Declarative**: Defined in NixOS configuration, deployed via GitOps
+
+**Monitoring**:
+```bash
+# Check service status (from local machine via SSH)
+ssh 10.1.0.2 "sudo systemctl status docker-sandbox.service"
+
+# View real-time logs
+ssh 10.1.0.2 "sudo journalctl -u docker-sandbox.service -f"
+
+# Check container status
+ssh 10.1.0.2 "sudo docker ps"
+
+# Check image details
+ssh 10.1.0.2 "sudo docker images wholelottahoopla/sandbox"
+```
+
+**Performance Notes**:
+- Docker image has **69 layers** (large image)
+- Initial pull takes ~4-6 minutes over AWS network
+- Layer extraction happens sequentially (~45-60 seconds per layer)
+- Once pulled, container starts quickly on subsequent runs
+- Image stored on VM1's dedicated 64GB virtio-blk volume (`/mnt/storage` or Docker's default `/var/lib/docker`)
+
+**Access from Local Machine**:
+Since you're connected to the Tailscale network, you can access the sandbox directly:
+```bash
+# Direct HTTP access
+curl http://10.1.0.2:8080
+
+# Or via browser
+open http://10.1.0.2:8080
+```
+
 ## Deployment Automation
 
 ### GitOps with Comin
