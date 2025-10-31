@@ -69,9 +69,16 @@ in
     ];
 
     # Bind-mount /nix/var to persistent storage
-    # This is required for Nix profiles and database to persist across reboots
+    # This is required for Nix database to persist across reboots
     fileSystems."/nix/var" = {
       device = "/var/nix-state";
+      options = [ "bind" ];
+    };
+
+    # Bind-mount /home to persistent storage
+    # This is required for user profiles (~/.local/state/nix) to persist across reboots
+    fileSystems."/home" = {
+      device = "/var/home";
       options = [ "bind" ];
     };
 
@@ -152,6 +159,8 @@ in
       "d /var/nix-overlay/work 0755 root root -"
       # Nix state directory for bind mount
       "d /var/nix-state 0755 root root -"
+      # Home directory for bind mount
+      "d /var/home 0755 root root -"
     ];
 
     # Allow root login with password (for learning/setup)
