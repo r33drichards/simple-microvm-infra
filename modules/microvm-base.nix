@@ -44,29 +44,27 @@ in
         tag = "ro-store";
         proto = "virtiofs";
       }
-      {
-        # Per-VM /var (writable)
-        source = "/var/lib/microvms/${config.networking.hostName}/var";
-        mountPoint = "/var";
-        tag = "var";
-        proto = "virtiofs";
-      }
+      # /var removed - using virtio-blk volume instead for better performance
     ];
 
-    # Dedicated 64GB disk volume per VM
+    # Dedicated disk volumes per VM (virtio-blk for performance)
     microvm.volumes = [
       {
-        # Path to disk image on host
-        image = "/var/lib/microvms/${config.networking.hostName}/data.img";
-        # 64GB = 65536 MiB
-        size = 65536;
-        # Auto-create the disk image if it doesn't exist
+        # /var volume - persistent VM state, logs, and application data
+        image = "/var/lib/microvms/${config.networking.hostName}/var.img";
+        size = 10240;  # 10GB for /var
         autoCreate = true;
-        # Filesystem type
         fsType = "ext4";
-        # Mount point inside the VM
+        mountPoint = "/var";
+        label = "${config.networking.hostName}-var";
+      }
+      {
+        # Data volume - for databases, Docker, large files
+        image = "/var/lib/microvms/${config.networking.hostName}/data.img";
+        size = 65536;  # 64GB
+        autoCreate = true;
+        fsType = "ext4";
         mountPoint = "/mnt/storage";
-        # Disk label for easy identification
         label = "${config.networking.hostName}-data";
       }
     ];
