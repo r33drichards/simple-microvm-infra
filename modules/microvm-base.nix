@@ -103,7 +103,7 @@ in
 
     # Enable Nix experimental features for user-level package management
     nix.settings = {
-      experimental-features = [ "nix-command" "flakes" ];
+      experimental-features = [ "nix-command" "flakes" "local-overlay-store" ];
       # Don't warn about read-only store
       warn-dirty = false;
       # Use local flake registry in writable location
@@ -114,27 +114,22 @@ in
     nix.package = pkgs.nix;
 
     # Enable Nix daemon for multi-user Nix operations
-    # Required for imperative package management with read-only /nix/store
+    # Required for imperative package management with overlay store
     systemd.services.nix-daemon = {
       # Unmask the service (it's masked by default in MicroVMs)
       enable = true;
       wantedBy = [ "multi-user.target" ];
     };
 
-    # Environment variables for Nix to work with read-only store
-    environment.variables = {
-      # Tell Nix that the store is read-only
-      NIX_REMOTE = "daemon";
-    };
-
-    # Configure journald for volatile storage (since /var is ephemeral)
-    services.journald.extraConfig = ''
-      Storage=volatile
-      RuntimeMaxUse=100M
-    '';
-
-    # Ensure persist directory exists before impermanence tries to use it
+    # Set up OverlayFS for writable /nix/store
+    # Lower layer: shared read-only /nix/.ro-store from host
+    # Upper layer: per-VM writable directory on /mnt/storage
     systemd.tmpfiles.rules = [
+      # Create overlay directories
+      "d /mnt/storage/nix-upper 0755 root root -"
+      "d /mnt/storage/nix-workdir 0755 root root -"
+    ] ++ [
+      # Existing tmpfiles rules
       "d /mnt/storage/persist 0755 root root -"
       # Create Nix state directories with proper permissions
       "d /nix/var 0755 root root -"
@@ -146,6 +141,25 @@ in
       "d /nix/var/nix/temproots 0755 root root -"
       "d /nix/var/nix/db 0755 root root -"
     ];
+
+    # Mount OverlayFS to combine read-only and writable stores
+    fileSystems."/nix/store" = {
+      fsType = "overlay";
+      device = "overlay";
+      options = [
+        "lowerdir=/nix/.ro-store"
+        "upperdir=/mnt/storage/nix-upper"
+        "workdir=/mnt/storage/nix-workdir"
+        "x-systemd.requires=mnt-storage.mount"
+        "x-systemd.after=mnt-storage.mount"
+      ];
+    };
+
+    # Configure journald for volatile storage (since /var is ephemeral)
+    services.journald.extraConfig = ''
+      Storage=volatile
+      RuntimeMaxUse=100M
+    '';
 
     # Impermanence: Define what persists to /mnt/storage/persist
     # Since /var is ephemeral (tmpfs), we persist critical state to the dedicated volume
