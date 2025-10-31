@@ -41,6 +41,9 @@ in
     # Disable systemd in initrd (simpler boot, no impermanence complexity)
     boot.initrd.systemd.enable = false;
 
+    # Allow writes to /nix/store (required for imperative package management)
+    boot.readOnlyNixStore = false;
+
     # Virtiofs filesystem shares from host
     # Share /nix/store from host (read-only, space-efficient)
     # When writableStoreOverlay is set, this becomes the lower layer of the overlay
