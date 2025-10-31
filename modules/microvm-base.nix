@@ -121,6 +121,13 @@ in
       wantedBy = [ "multi-user.target" ];
     };
 
+    # Enable writable /nix/store using microvm.nix's built-in overlay feature
+    # This creates an overlay with:
+    # - Lower layer: shared read-only /nix/.ro-store from host
+    # - Upper layer: writable /mnt/storage/nix-overlay/store
+    # - Work dir: /mnt/storage/nix-overlay/work
+    microvm.writableStoreOverlay = "/mnt/storage/nix-overlay";
+
     # Tmpfiles rules for persistent directories
     systemd.tmpfiles.rules = [
       "d /mnt/storage/persist 0755 root root -"
@@ -133,28 +140,7 @@ in
       "d /nix/var/nix/gcroots/per-user 0755 root root -"
       "d /nix/var/nix/temproots 0755 root root -"
       "d /nix/var/nix/db 0755 root root -"
-      # Create overlay directories on persistent storage
-      "d /mnt/storage/nix-upper 0755 root root -"
-      "d /mnt/storage/nix-workdir 0755 root root -"
     ];
-
-    # Override the default /nix/store mount with an overlay
-    # This needs high priority to override microvm.nix's auto-generated mount
-    # Note: We can't use neededForBoot because /mnt/storage isn't available in initrd
-    # Instead, we disable the default mount and create our own that depends on storage
-    microvm.writableStoreOverlay = lib.mkForce null;  # Disable any microvm.nix overlay
-
-    fileSystems."/nix/store" = lib.mkOverride 10 {
-      device = "overlay";
-      fsType = "overlay";
-      options = [
-        "lowerdir=/nix/.ro-store"
-        "upperdir=/mnt/storage/nix-upper"
-        "workdir=/mnt/storage/nix-workdir"
-        "x-systemd.requires-mounts-for=/mnt/storage"
-      ];
-      noCheck = true;
-    };
 
     # Configure journald for volatile storage (since /var is ephemeral)
     services.journald.extraConfig = ''
