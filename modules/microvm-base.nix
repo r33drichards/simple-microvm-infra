@@ -38,6 +38,11 @@ in
     boot.kernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
+    # Disable systemd in initrd to prevent mount unit overrides that break writable overlay
+    # microvm.nix creates systemd.mounts overrides when boot.initrd.systemd.enable = true
+    # which conflicts with writableStoreOverlay
+    boot.initrd.systemd.enable = false;
+
     # Virtiofs filesystem shares from host
     # Share /nix/store from host (read-only, space-efficient)
     # When writableStoreOverlay is set, this becomes the lower layer of the overlay
