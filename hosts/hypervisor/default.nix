@@ -10,6 +10,9 @@
 
     # Network bridges, NAT, firewall
     ./network.nix
+
+    # GitOps deployment automation
+    ./comin.nix
   ];
 
   # Nix settings

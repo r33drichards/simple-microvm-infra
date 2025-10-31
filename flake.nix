@@ -12,9 +12,15 @@
       url = "github:astro/microvm.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # GitOps deployment automation
+    comin = {
+      url = "github:nlewo/comin";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm }:
+  outputs = { self, nixpkgs, microvm, comin }:
     let
       # VM definitions - add/remove VMs here
       # Each VM gets its own isolated network (10.X.0.0/24)
@@ -69,6 +75,7 @@
           system = "aarch64-linux";
           modules = [
             microvm.nixosModules.host  # Enable MicroVM host support
+            comin.nixosModules.comin   # GitOps deployment automation
             ./hosts/hypervisor
           ];
         };
