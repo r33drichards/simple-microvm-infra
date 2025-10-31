@@ -143,7 +143,8 @@ in
     ];
 
     # Mount OverlayFS to combine read-only and writable stores
-    fileSystems."/nix/store" = {
+    # Override the default virtiofs mount that microvm.nix creates
+    fileSystems."/nix/store" = lib.mkForce {
       fsType = "overlay";
       device = "overlay";
       options = [
