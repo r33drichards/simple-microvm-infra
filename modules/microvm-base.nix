@@ -38,14 +38,8 @@ in
     boot.kernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
-    # Enable systemd in initrd (required for impermanence module)
-    boot.initrd.systemd.enable = true;
-
-    # Override microvm.nix's mount unit to not interfere with the overlay
-    # microvm.nix adds a systemd.mounts entry when systemd in initrd is enabled
-    # that sets What=store which overrides the overlay mount
-    # We override it to be empty so the overlay mount from fileSystems takes precedence
-    systemd.mounts = lib.mkForce [];
+    # Disable systemd in initrd (simpler boot, no impermanence complexity)
+    boot.initrd.systemd.enable = false;
 
     # Virtiofs filesystem shares from host
     # Share /nix/store from host (read-only, space-efficient)
@@ -57,16 +51,16 @@ in
       proto = "virtiofs";
     }];
 
-    # Dedicated disk volumes per VM (virtio-blk for performance)
-    # /var is ephemeral (in-memory tmpfs), all persistent data goes to /mnt/storage
+    # Dedicated disk volume per VM (virtio-blk for performance)
+    # Mounted at /var for persistent state (logs, systemd, Nix DB, etc.)
     microvm.volumes = [
       {
-        # Data volume - for databases, Docker, large files, and any persistent application data
+        # Data volume - persistent /var and overlay upper layer
         image = "/var/lib/microvms/${config.networking.hostName}/data.img";
         size = 65536;  # 64GB
         autoCreate = true;
         fsType = "ext4";
-        mountPoint = "/mnt/storage";
+        mountPoint = "/var";
         label = "${config.networking.hostName}-data";
       }
     ];
@@ -134,83 +128,19 @@ in
 
     # Enable writable /nix/store using microvm.nix's built-in overlay feature
     # This creates an overlay with:
-    # - Lower layer: shared read-only /nix/.ro-store from host
-    # - Upper layer: writable /mnt/storage/nix-overlay/store
-    # - Work dir: /mnt/storage/nix-overlay/work
-    microvm.writableStoreOverlay = "/mnt/storage/nix-overlay";
+    # - Lower layer: shared read-only /nix/.ro-store from host (virtiofs)
+    # - Upper layer: writable /var/nix-overlay/store (on persistent volume)
+    # - Work dir: /var/nix-overlay/work (on persistent volume)
+    microvm.writableStoreOverlay = "/var/nix-overlay";
 
-    # Tmpfiles rules for persistent directories
+    # Tmpfiles rules to create Nix overlay directories
+    # Note: /var is now on persistent volume, so these persist across reboots
     systemd.tmpfiles.rules = [
-      "d /mnt/storage/persist 0755 root root -"
-      # Create Nix state directories with proper permissions
-      "d /nix/var 0755 root root -"
-      "d /nix/var/nix 0755 root root -"
-      "d /nix/var/nix/profiles 0755 root root -"
-      "d /nix/var/nix/profiles/per-user 0755 root root -"
-      "d /nix/var/nix/gcroots 0755 root root -"
-      "d /nix/var/nix/gcroots/per-user 0755 root root -"
-      "d /nix/var/nix/temproots 0755 root root -"
-      "d /nix/var/nix/db 0755 root root -"
+      # Nix overlay directories
+      "d /var/nix-overlay 0755 root root -"
+      "d /var/nix-overlay/store 0755 root root -"
+      "d /var/nix-overlay/work 0755 root root -"
     ];
-
-    # Configure journald for volatile storage (since /var is ephemeral)
-    services.journald.extraConfig = ''
-      Storage=volatile
-      RuntimeMaxUse=100M
-    '';
-
-    # Impermanence: Define what persists to /mnt/storage/persist
-    # Since /var is ephemeral (tmpfs), we persist critical state to the dedicated volume
-    environment.persistence."/mnt/storage/persist" = {
-      hideMounts = true;
-
-      directories = [
-        # System state that must survive reboots
-        "/var/lib/systemd"           # systemd state (timers, etc.)
-        "/var/lib/nixos"             # NixOS state (uid/gid mappings, etc.)
-
-        # Docker state (for VMs with Docker enabled)
-        { directory = "/var/lib/docker"; }
-
-        # Network configuration
-        "/var/lib/dhcpcd"            # DHCP client state (if used)
-
-        # Nix user profiles (for nix profile install)
-        "/nix/var/nix/profiles"
-        "/nix/var/nix/profiles/per-user"
-        "/nix/var/nix/gcroots"
-        "/nix/var/nix/gcroots/per-user"
-        "/nix/var/nix/temproots"
-        "/nix/var/nix/db"
-      ];
-
-      files = [
-        # Machine ID - used by systemd and various services
-        "/etc/machine-id"
-
-        # SSH host keys - persist individual key files only
-        # Do NOT persist entire /etc/ssh as it shadows sshd_config
-        "/etc/ssh/ssh_host_ed25519_key"
-        "/etc/ssh/ssh_host_ed25519_key.pub"
-        "/etc/ssh/ssh_host_rsa_key"
-        "/etc/ssh/ssh_host_rsa_key.pub"
-      ];
-
-      users.robertwendt = {
-        directories = [
-          # User home directory persistence
-          "Documents"
-          "Downloads"
-          ".ssh"
-          { directory = ".local/share"; mode = "0700"; }
-          ".nix-defexpr"
-        ];
-        files = [
-          ".bash_history"
-          { file = ".nix-profile"; parentDirectory = { mode = "0755"; }; }
-        ];
-      };
-    };
 
     # Allow root login with password (for learning/setup)
     # CHANGE THIS in production!

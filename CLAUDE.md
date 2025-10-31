@@ -627,3 +627,5 @@ Potential improvements to consider:
 - ssh locally into the vms, you are connected to tailscale
 - you can inspect aws resources with aws cli, you are logged in
 - nixos-firewall-tool is for imperative fw management in nixos fyi
+- > >      Oct 31 22:09:46 ip-172-31-0-17.us-west-2.compute.internal comin[279769]: building '/nix/store/zh8hfwv6pi1gkzkay0s6m64iqz9mkwwl-microvm-store-disk.erofs.drv'...
+this should not be happening it takes too long to build

@@ -1,7 +1,7 @@
 # lib/default.nix
 # Helper function for building MicroVM configurations
 # Automatically includes microvm.nix and microvm-base.nix modules
-{ self, nixpkgs, microvm, impermanence }:
+{ self, nixpkgs, microvm }:
 
 { modules }:
 
@@ -11,9 +11,6 @@ nixpkgs.lib.nixosSystem {
   modules = [
     # Include microvm.nix module (provides microvm.* options)
     microvm.nixosModules.microvm
-
-    # Include impermanence module (manages persistent state)
-    impermanence.nixosModules.impermanence
 
     # Include our base MicroVM config
     ../modules/microvm-base.nix
