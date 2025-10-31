@@ -40,7 +40,7 @@ This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and 
 │    └─────────────┘   └─────────────┘   └─────────────┘         │
 │                                                                   │
 │  NAT: 10.0.0.0/8 → enP2p4s0 (internet)                          │
-│  Tailscale: Advertises 10.1-4.0.0/24 subnets                    │
+│  Tailscale: Advertises 10.1-5.0.0/24 subnets                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,6 +54,7 @@ Each VM has its own isolated network segment:
 - **VM2**: 10.2.0.0/24 (VM at 10.2.0.2, gateway at 10.2.0.1)
 - **VM3**: 10.3.0.0/24 (VM at 10.3.0.2, gateway at 10.3.0.1)
 - **VM4**: 10.4.0.0/24 (VM at 10.4.0.2, gateway at 10.4.0.1)
+- **VM5**: 10.5.0.0/24 (VM at 10.5.0.2, gateway at 10.5.0.1)
 
 Each network consists of:
 1. A bridge interface on the hypervisor (br-vm1, br-vm2, etc.)
@@ -437,7 +438,7 @@ Per VM (approximate):
 - **Overhead**: ~100-200MB RAM per VM for QEMU
 
 Hypervisor (a1.metal):
-- **Total RAM**: 32GB (4 VMs = ~5GB used, 27GB free)
+- **Total RAM**: 32GB (5 VMs = ~6GB used, 26GB free)
 - **Total CPUs**: 16 cores
 - **Storage**: Root filesystem on EBS
 
@@ -451,7 +452,7 @@ Hypervisor (a1.metal):
 
 - **Cold Boot**: ~3-5 seconds (VM start to SSH available)
 - **Rebuild**: ~30 seconds to 2 minutes (depending on changes)
-- **Full Deployment**: ~2-5 minutes (all 4 VMs)
+- **Full Deployment**: ~2-5 minutes (all 5 VMs)
 
 ## Future Enhancements
 

@@ -37,7 +37,7 @@ Pull changes and rebuild VMs on the remote hypervisor:
 
 ```bash
 ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
-  "cd simple-microvm-infra && git pull && microvm -u vm1 vm2 vm3 vm4"
+  "cd simple-microvm-infra && git pull && microvm -u vm1 vm2 vm3 vm4 vm5"
 ```
 
 ### 4. Restart VMs (if needed)
@@ -53,7 +53,7 @@ Or use the `-R` flag with microvm to auto-restart:
 
 ```bash
 ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
-  "cd simple-microvm-infra && microvm -Ru vm1 vm2 vm3 vm4"
+  "cd simple-microvm-infra && microvm -Ru vm1 vm2 vm3 vm4 vm5"
 ```
 
 ## Common Development Tasks
@@ -207,7 +207,7 @@ git push
 
 ```bash
 ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
-  "cd simple-microvm-infra && git pull && microvm -Ru vm1 vm2 vm3 vm4"
+  "cd simple-microvm-infra && git pull && microvm -Ru vm1 vm2 vm3 vm4 vm5"
 ```
 
 ### 3. Or: Use Nix Generations
