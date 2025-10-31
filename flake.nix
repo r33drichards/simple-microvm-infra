@@ -73,6 +73,7 @@
         # Hypervisor (physical host)
         hypervisor = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
+          specialArgs = { inherit self; };
           modules = [
             microvm.nixosModules.host  # Enable MicroVM host support
             comin.nixosModules.comin   # GitOps deployment automation
