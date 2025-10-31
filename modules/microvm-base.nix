@@ -194,7 +194,7 @@ in
     security.sudo.wheelNeedsPassword = false;
 
     # Claude Code configuration setup
-    # NOTE: API key is stored in plain text - consider using sops-nix or agenix for production
+    # Uses ANTHROPIC_API_KEY environment variable for authentication
     systemd.services.setup-claude-code = {
       description = "Set up Claude Code API key configuration";
       wantedBy = [ "multi-user.target" ];
@@ -218,10 +218,10 @@ in
         EOF
 
         # Create API key helper script
-        # NOTE: API key stored in plain text - use secrets management for production
+        # Uses ANTHROPIC_API_KEY environment variable
         cat > /home/robertwendt/.claude/anthropic_key.sh << 'EOF'
         #!/bin/sh
-        echo "EORZYJoygCBtBGUVxr6cfPuCwMJSQfJeJCVaYe2jf6i3PyEb#EheCqj0wEAAlcrdL5mYmt-yX4UDCxyPkcbTfOh346eM"
+        echo "$ANTHROPIC_API_KEY"
         EOF
 
         # Make the script executable
