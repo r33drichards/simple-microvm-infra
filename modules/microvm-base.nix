@@ -68,6 +68,13 @@ in
       }
     ];
 
+    # Bind-mount /nix/var to persistent storage
+    # This is required for Nix profiles and database to persist across reboots
+    fileSystems."/nix/var" = {
+      device = "/var/nix-state";
+      options = [ "bind" ];
+    };
+
     # TAP network interface
     microvm.interfaces = [{
       type = "tap";
@@ -143,6 +150,8 @@ in
       "d /var/nix-overlay 0755 root root -"
       "d /var/nix-overlay/store 0755 root root -"
       "d /var/nix-overlay/work 0755 root root -"
+      # Nix state directory for bind mount
+      "d /var/nix-state 0755 root root -"
     ];
 
     # Allow root login with password (for learning/setup)
