@@ -95,6 +95,11 @@ in
       RuntimeMaxUse=100M
     '';
 
+    # Ensure persist directory exists before impermanence tries to use it
+    systemd.tmpfiles.rules = [
+      "d /mnt/storage/persist 0755 root root -"
+    ];
+
     # Impermanence: Define what persists to /mnt/storage/persist
     # Since /var is ephemeral (tmpfs), we persist critical state to the dedicated volume
     environment.persistence."/mnt/storage/persist" = {
