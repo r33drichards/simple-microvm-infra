@@ -148,6 +148,8 @@ in
       wantedBy = [ "multi-user.target" ];
       unitConfig.DefaultDependencies = false;
 
+      path = [ pkgs.util-linux pkgs.coreutils ];
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
