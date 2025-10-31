@@ -18,9 +18,14 @@
       url = "github:nlewo/comin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Impermanence - manage persistent state on ephemeral systems
+    impermanence = {
+      url = "github:nix-community/impermanence";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm, comin }:
+  outputs = { self, nixpkgs, microvm, comin, impermanence }:
     let
       # VM definitions - add/remove VMs here
       # Each VM gets its own isolated network (10.X.0.0/24)
@@ -83,6 +88,6 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm; };
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm impermanence; };
     };
 }
