@@ -118,6 +118,12 @@
                   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
                 ];
               };
+
+              # Ensure home directory exists even when user is "revived"
+              # NixOS doesn't create home directories for existing users during revival
+              systemd.tmpfiles.rules = [
+                "d /home/robertwendt 0700 robertwendt users -"
+              ];
             })
           ];
         };
