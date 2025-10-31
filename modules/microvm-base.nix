@@ -103,7 +103,7 @@ in
 
     # Enable Nix experimental features for user-level package management
     nix.settings = {
-      experimental-features = [ "nix-command" "flakes" "local-overlay-store" ];
+      experimental-features = [ "nix-command" "flakes" ];
       # Don't warn about read-only store
       warn-dirty = false;
       # Use local flake registry in writable location
