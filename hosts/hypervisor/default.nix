@@ -134,14 +134,15 @@
 
   # Create MicroVM storage directory on root filesystem
   # This is simpler than ZFS but uses the root volume for storage
+  # NOTE: Directories must be owned by microvm:kvm to allow VMs to create the 'booted' symlink
   systemd.tmpfiles.rules = [
-    "d /var/lib/microvms 0755 root root -"
-    "d /var/lib/microvms/vm1 0755 root root -"
-    "d /var/lib/microvms/vm2 0755 root root -"
-    "d /var/lib/microvms/vm3 0755 root root -"
-    "d /var/lib/microvms/vm4 0755 root root -"
-    "d /var/lib/microvms/vm5 0755 root root -"
-    # Create secrets directory for VM1
+    "d /var/lib/microvms 0755 microvm kvm -"
+    "d /var/lib/microvms/vm1 0755 microvm kvm -"
+    "d /var/lib/microvms/vm2 0755 microvm kvm -"
+    "d /var/lib/microvms/vm3 0755 microvm kvm -"
+    "d /var/lib/microvms/vm4 0755 microvm kvm -"
+    "d /var/lib/microvms/vm5 0755 microvm kvm -"
+    # Create secrets directory for VM1 (root-only for security)
     "d /var/lib/microvms/vm1/secrets 0700 root root -"
   ];
 
