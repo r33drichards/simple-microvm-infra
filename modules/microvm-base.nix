@@ -95,6 +95,48 @@ in
       RuntimeMaxUse=100M
     '';
 
+    # Impermanence: Define what persists to /mnt/storage/persist
+    # Since /var is ephemeral (tmpfs), we persist critical state to the dedicated volume
+    environment.persistence."/mnt/storage/persist" = {
+      hideMounts = true;
+
+      directories = [
+        # System state that must survive reboots
+        "/var/lib/systemd"           # systemd state (timers, etc.)
+        "/var/lib/nixos"             # NixOS state (uid/gid mappings, etc.)
+
+        # Docker state (for VMs with Docker enabled)
+        { directory = "/var/lib/docker"; }
+
+        # Network configuration
+        "/var/lib/dhcpcd"            # DHCP client state (if used)
+      ];
+
+      files = [
+        # SSH host keys - critical for consistent host identity
+        "/etc/ssh/ssh_host_ed25519_key"
+        "/etc/ssh/ssh_host_ed25519_key.pub"
+        "/etc/ssh/ssh_host_rsa_key"
+        "/etc/ssh/ssh_host_rsa_key.pub"
+
+        # Machine ID - used by systemd and various services
+        "/etc/machine-id"
+      ];
+
+      users.robertwendt = {
+        directories = [
+          # User home directory persistence
+          "Documents"
+          "Downloads"
+          ".ssh"
+          { directory = ".local/share"; mode = "0700"; }
+        ];
+        files = [
+          ".bash_history"
+        ];
+      };
+    };
+
     # Allow root login with password (for learning/setup)
     # CHANGE THIS in production!
     users.users.root.initialPassword = "nixos";
