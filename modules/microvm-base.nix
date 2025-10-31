@@ -121,15 +121,8 @@ in
       wantedBy = [ "multi-user.target" ];
     };
 
-    # Set up OverlayFS for writable /nix/store
-    # Lower layer: shared read-only /nix/.ro-store from host
-    # Upper layer: per-VM writable directory on /mnt/storage
+    # Tmpfiles rules for persistent directories
     systemd.tmpfiles.rules = [
-      # Create overlay directories
-      "d /mnt/storage/nix-upper 0755 root root -"
-      "d /mnt/storage/nix-workdir 0755 root root -"
-    ] ++ [
-      # Existing tmpfiles rules
       "d /mnt/storage/persist 0755 root root -"
       # Create Nix state directories with proper permissions
       "d /nix/var 0755 root root -"
@@ -140,20 +133,37 @@ in
       "d /nix/var/nix/gcroots/per-user 0755 root root -"
       "d /nix/var/nix/temproots 0755 root root -"
       "d /nix/var/nix/db 0755 root root -"
+      # Create overlay directories on persistent storage
+      "d /mnt/storage/nix-upper 0755 root root -"
+      "d /mnt/storage/nix-workdir 0755 root root -"
     ];
 
-    # Mount OverlayFS to combine read-only and writable stores
-    # Override the default virtiofs mount that microvm.nix creates
-    fileSystems."/nix/store" = lib.mkForce {
-      fsType = "overlay";
-      device = "overlay";
-      options = [
-        "lowerdir=/nix/.ro-store"
-        "upperdir=/mnt/storage/nix-upper"
-        "workdir=/mnt/storage/nix-workdir"
-      ];
-      # Ensure /mnt/storage is mounted first
-      depends = [ "/mnt/storage" ];
+    # Set up OverlayFS for writable /nix/store via systemd service
+    # This runs after /mnt/storage is mounted, avoiding boot-time dependency issues
+    systemd.services.setup-nix-overlay = {
+      description = "Setup OverlayFS for writable /nix/store";
+      after = [ "mnt-storage.mount" ];
+      requires = [ "mnt-storage.mount" ];
+      before = [ "nix-daemon.service" ];
+      wantedBy = [ "multi-user.target" ];
+      unitConfig.DefaultDependencies = false;
+
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+
+      script = ''
+        # Unmount the virtiofs /nix/store if it's mounted
+        if mountpoint -q /nix/store; then
+          umount /nix/store
+        fi
+
+        # Mount overlay combining read-only and writable stores
+        mount -t overlay overlay \
+          -o lowerdir=/nix/.ro-store,upperdir=/mnt/storage/nix-upper,workdir=/mnt/storage/nix-workdir \
+          /nix/store
+      '';
     };
 
     # Configure journald for volatile storage (since /var is ephemeral)
