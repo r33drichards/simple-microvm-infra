@@ -115,16 +115,18 @@ in
 
         # Network configuration
         "/var/lib/dhcpcd"            # DHCP client state (if used)
-
-        # SSH directory - contains host keys and config
-        # Persisting entire directory instead of individual files
-        # avoids first-boot chicken-and-egg issue with key generation
-        "/etc/ssh"
       ];
 
       files = [
         # Machine ID - used by systemd and various services
         "/etc/machine-id"
+
+        # SSH host keys - persist individual key files only
+        # Do NOT persist entire /etc/ssh as it shadows sshd_config
+        "/etc/ssh/ssh_host_ed25519_key"
+        "/etc/ssh/ssh_host_ed25519_key.pub"
+        "/etc/ssh/ssh_host_rsa_key"
+        "/etc/ssh/ssh_host_rsa_key.pub"
       ];
 
       users.robertwendt = {
