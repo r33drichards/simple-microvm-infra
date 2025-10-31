@@ -102,7 +102,22 @@ in
     i18n.defaultLocale = "en_US.UTF-8";
 
     # Enable Nix experimental features for user-level package management
-    nix.settings.experimental-features = [ "nix-command" "flakes" ];
+    nix.settings = {
+      experimental-features = [ "nix-command" "flakes" ];
+      # Don't warn about read-only store
+      warn-dirty = false;
+      # Use local flake registry in writable location
+      flake-registry = "/etc/nix/registry.json";
+    };
+
+    # Ensure Nix package is available
+    nix.package = pkgs.nix;
+
+    # Environment variables for Nix to work with read-only store
+    environment.variables = {
+      # Tell Nix that the store is read-only
+      NIX_REMOTE = "daemon";
+    };
 
     # Configure journald for volatile storage (since /var is ephemeral)
     services.journald.extraConfig = ''
@@ -113,8 +128,13 @@ in
     # Ensure persist directory exists before impermanence tries to use it
     systemd.tmpfiles.rules = [
       "d /mnt/storage/persist 0755 root root -"
+      # Create Nix state directories with proper permissions
+      "d /nix/var 0755 root root -"
+      "d /nix/var/nix 0755 root root -"
       "d /nix/var/nix/profiles 0755 root root -"
+      "d /nix/var/nix/profiles/per-user 0755 root root -"
       "d /nix/var/nix/gcroots 0755 root root -"
+      "d /nix/var/nix/gcroots/per-user 0755 root root -"
       "d /nix/var/nix/temproots 0755 root root -"
       "d /nix/var/nix/db 0755 root root -"
     ];
@@ -137,7 +157,9 @@ in
 
         # Nix user profiles (for nix profile install)
         "/nix/var/nix/profiles"
+        "/nix/var/nix/profiles/per-user"
         "/nix/var/nix/gcroots"
+        "/nix/var/nix/gcroots/per-user"
         "/nix/var/nix/temproots"
         "/nix/var/nix/db"
       ];
