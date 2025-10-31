@@ -1,6 +1,6 @@
 # hosts/hypervisor/network.nix
 # Networking for hypervisor: bridges, NAT, isolation firewall
-# Uses NixOS native options with nftables backend
+# Uses networking.nftables.ruleset for atomic updates
 { config, pkgs, lib, ... }:
 
 let
@@ -11,6 +11,7 @@ let
   bridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge) networks.networks);
 
   # Generate nftables rules to block all inter-VM traffic
+  # For each bridge, create rules to DROP traffic to all other bridges
   generateIsolationRules =
     let
       allBridges = bridges;
@@ -28,7 +29,7 @@ let
       )
     );
 
-  # Generate list of bridge interfaces
+  # Generate list of bridge interfaces for nftables sets
   bridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") bridges);
 in
 {
@@ -52,67 +53,91 @@ in
     "net.ipv4.ip_forward" = 1;
   };
 
-  # Native NixOS firewall with nftables backend
-  networking.firewall = {
+  # Disable legacy iptables-based firewall and NAT
+  networking.firewall.enable = false;
+  networking.nat.enable = false;
+
+  # Use nftables with atomic ruleset updates
+  networking.nftables = {
     enable = true;
 
-    # Use nftables backend instead of iptables
-    backend = "nftables";
-
-    # Allow SSH
-    allowedTCPPorts = [ 22 ];
-
-    # Trust Tailscale and bridge interfaces
-    trustedInterfaces = [ "tailscale0" ] ++ bridges;
-
-    # Custom rules for inter-VM isolation and logging
-    extraForwardRules = ''
-      # Block inter-VM traffic (maintain isolation)
-      ${generateIsolationRules}
-
-      # Log dropped forward packets for debugging
-      log prefix "FORWARD DROP: " drop
-    '';
-
-    # Log dropped input packets
-    extraInputRules = ''
-      log prefix "INPUT DROP: " drop
-    '';
-  };
-
-  # Native NixOS NAT with nftables
-  networking.nat = {
-    enable = true;
-
-    # External interface for internet access
-    externalInterface = "enP2p4s0";
-
-    # Internal interfaces (VM bridges)
-    internalInterfaces = bridges;
-  };
-
-  # Additional nftables rules for IMDS forwarding
-  # This is the one piece that doesn't have native NixOS options
-  networking.nftables.tables = {
-    imds-nat = {
-      family = "ip";
-      content = ''
-        # Forward AWS Instance Metadata Service requests from VMs
+    # Atomic ruleset - all rules updated together
+    # See https://wiki.nftables.org/ for documentation
+    ruleset = ''
+      # NAT table for internet access and IMDS forwarding
+      table ip nat {
+        # Prerouting: DNAT for IMDS requests from VMs
         chain prerouting {
-          type nat hook prerouting priority dstnat + 1;
+          type nat hook prerouting priority dstnat; policy accept;
 
-          # Forward IMDS requests from VMs to hypervisor's IMDS
-          # Allows VMs to access EC2 instance role credentials
+          # Forward AWS Instance Metadata Service requests from VMs to hypervisor's IMDS
+          # Allows VMs to access EC2 instance role credentials at 169.254.169.254
           ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 tcp dport 80 dnat to 169.254.169.254:80
         }
 
+        # Postrouting: Masquerade for internet and IMDS
         chain postrouting {
-          type nat hook postrouting priority srcnat + 1;
+          type nat hook postrouting priority srcnat; policy accept;
 
-          # Masquerade IMDS traffic so IMDS sees requests from hypervisor
+          # Masquerade IMDS traffic so IMDS sees requests as coming from hypervisor
           ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 masquerade
+
+          # Masquerade VM traffic to internet via external interface (AWS a1.metal)
+          oifname "enP2p4s0" ip saddr 10.0.0.0/8 masquerade
         }
-      '';
-    };
+      }
+
+      # Filter table for firewall and isolation
+      table inet filter {
+        # Input: traffic to hypervisor
+        chain input {
+          type filter hook input priority filter; policy drop;
+
+          # Accept established/related connections
+          ct state { established, related } accept
+
+          # Accept loopback traffic
+          iifname "lo" accept
+
+          # Accept Tailscale VPN traffic
+          iifname "tailscale0" accept
+
+          # Accept SSH from anywhere
+          tcp dport 22 accept
+
+          # Accept traffic from VM bridges (for gateway/DNS services)
+          iifname { ${bridgeList} } accept
+
+          # Log and drop everything else
+          log prefix "INPUT DROP: " drop
+        }
+
+        # Forward: traffic between interfaces (VMs to internet, VM isolation)
+        chain forward {
+          type filter hook forward priority filter; policy drop;
+
+          # Accept established/related connections
+          ct state { established, related } accept
+
+          # Block inter-VM traffic (maintain isolation)
+          # Generated dynamically from networks.nix
+          ${generateIsolationRules}
+
+          # Accept VM to internet traffic
+          iifname { ${bridgeList} } oifname "enP2p4s0" accept
+
+          # Accept internet to VM traffic (return traffic only)
+          iifname "enP2p4s0" oifname { ${bridgeList} } ct state { established, related } accept
+
+          # Log and drop everything else
+          log prefix "FORWARD DROP: " drop
+        }
+
+        # Output: traffic from hypervisor
+        chain output {
+          type filter hook output priority filter; policy accept;
+        }
+      }
+    '';
   };
 }
