@@ -138,34 +138,22 @@ in
       "d /mnt/storage/nix-workdir 0755 root root -"
     ];
 
-    # Set up OverlayFS for writable /nix/store via systemd service
-    # This runs after /mnt/storage is mounted, avoiding boot-time dependency issues
-    systemd.services.setup-nix-overlay = {
-      description = "Setup OverlayFS for writable /nix/store";
-      after = [ "mnt-storage.mount" ];
-      requires = [ "mnt-storage.mount" ];
-      before = [ "nix-daemon.service" ];
-      wantedBy = [ "multi-user.target" ];
-      unitConfig.DefaultDependencies = false;
+    # Override the default /nix/store mount with an overlay
+    # This needs high priority to override microvm.nix's auto-generated mount
+    # Note: We can't use neededForBoot because /mnt/storage isn't available in initrd
+    # Instead, we disable the default mount and create our own that depends on storage
+    microvm.writableStoreOverlay = lib.mkForce null;  # Disable any microvm.nix overlay
 
-      path = [ pkgs.util-linux pkgs.coreutils ];
-
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-      };
-
-      script = ''
-        # Unmount the virtiofs /nix/store if it's mounted
-        if mountpoint -q /nix/store; then
-          umount /nix/store
-        fi
-
-        # Mount overlay combining read-only and writable stores
-        mount -t overlay overlay \
-          -o lowerdir=/nix/.ro-store,upperdir=/mnt/storage/nix-upper,workdir=/mnt/storage/nix-workdir \
-          /nix/store
-      '';
+    fileSystems."/nix/store" = lib.mkOverride 10 {
+      device = "overlay";
+      fsType = "overlay";
+      options = [
+        "lowerdir=/nix/.ro-store"
+        "upperdir=/mnt/storage/nix-upper"
+        "workdir=/mnt/storage/nix-workdir"
+        "x-systemd.requires-mounts-for=/mnt/storage"
+      ];
+      noCheck = true;
     };
 
     # Configure journald for volatile storage (since /var is ephemeral)
