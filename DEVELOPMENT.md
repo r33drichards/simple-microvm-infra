@@ -36,7 +36,7 @@ git push
 Pull changes and rebuild VMs on the remote hypervisor:
 
 ```bash
-ssh -i "bm nixos us west 2.pem" root@16.144.20.78 \
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
   "cd simple-microvm-infra && git pull && microvm -u vm1 vm2 vm3 vm4"
 ```
 
@@ -45,14 +45,14 @@ ssh -i "bm nixos us west 2.pem" root@16.144.20.78 \
 If the microvm command indicates a restart is needed:
 
 ```bash
-ssh -i "bm nixos us west 2.pem" root@16.144.20.78 \
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
   "systemctl restart microvm@vm1 microvm@vm2 microvm@vm3 microvm@vm4"
 ```
 
 Or use the `-R` flag with microvm to auto-restart:
 
 ```bash
-ssh -i "bm nixos us west 2.pem" root@16.144.20.78 \
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
   "cd simple-microvm-infra && microvm -Ru vm1 vm2 vm3 vm4"
 ```
 
@@ -147,14 +147,14 @@ ssh robertwendt@10.4.0.2  # vm4
 
 From the hypervisor directly:
 ```bash
-ssh root@16.144.20.78
+ssh root@35.92.20.130
 ssh robertwendt@10.1.0.2
 ```
 
 ### View VM Logs
 
 ```bash
-ssh -i "bm nixos us west 2.pem" root@16.144.20.78 \
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
   "journalctl -u microvm@vm1 -f"
 ```
 
@@ -206,7 +206,7 @@ git push
 ### 2. Redeploy Previous Configuration
 
 ```bash
-ssh -i "bm nixos us west 2.pem" root@16.144.20.78 \
+ssh -i "bm-nixos-us-west-2.pem" root@35.92.20.130 \
   "cd simple-microvm-infra && git pull && microvm -Ru vm1 vm2 vm3 vm4"
 ```
 
@@ -298,30 +298,30 @@ nix build .#nixosConfigurations.vm1.config.system.build.toplevel
 
 1. Check systemd service status:
    ```bash
-   ssh root@16.144.20.78 "systemctl status microvm@vm1"
+   ssh root@35.92.20.130 "systemctl status microvm@vm1"
    ```
 
 2. Check for errors in journal:
    ```bash
-   ssh root@16.144.20.78 "journalctl -u microvm@vm1 -n 100"
+   ssh root@35.92.20.130 "journalctl -u microvm@vm1 -n 100"
    ```
 
 3. Try running in foreground:
    ```bash
-   ssh root@16.144.20.78 "microvm -r vm1"
+   ssh root@35.92.20.130 "microvm -r vm1"
    ```
 
 ### Network Not Working
 
 1. Verify TAP interface exists and is in bridge:
    ```bash
-   ssh root@16.144.20.78 "ip link show vm-vm1"
-   ssh root@16.144.20.78 "bridge link show"
+   ssh root@35.92.20.130 "ip link show vm-vm1"
+   ssh root@35.92.20.130 "bridge link show"
    ```
 
 2. Check bridge has correct IP:
    ```bash
-   ssh root@16.144.20.78 "ip addr show br-vm1"
+   ssh root@35.92.20.130 "ip addr show br-vm1"
    ```
 
 3. Inside VM, verify interface configuration:

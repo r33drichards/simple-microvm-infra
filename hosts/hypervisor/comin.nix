@@ -16,30 +16,8 @@
       };
     }];
 
-    # Deployment hooks
-    # These run after successful deployment
-    postDeployHook = pkgs.writeShellScript "post-deploy-hook" ''
-      set -eu
-
-      echo "=== Comin Post-Deploy Hook ==="
-      echo "Deployment completed at: $(date)"
-      echo "Branch: $COMIN_BRANCH"
-      echo "Commit: $COMIN_COMMIT"
-
-      # Log the deployment
-      logger -t comin "Deployment successful: $COMIN_BRANCH @ $COMIN_COMMIT"
-
-      # Check microvm status
-      echo "=== MicroVM Status ==="
-      systemctl list-units 'microvm@*' --no-pager || true
-
-      # Log active VMs
-      ACTIVE_VMS=$(systemctl list-units 'microvm@*' --state=active --no-legend | wc -l)
-      echo "Active MicroVMs: $ACTIVE_VMS"
-      logger -t comin "Active MicroVMs after deployment: $ACTIVE_VMS"
-
-      echo "=== Deployment Complete ==="
-    '';
+    # Note: postDeployHook is not yet supported in the current version of Comin
+    # Will be added once the feature is available
   };
 
   # Enable git for Comin to use

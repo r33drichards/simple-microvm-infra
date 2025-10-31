@@ -19,7 +19,7 @@ This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ AWS a1.metal (ARM64) - Hypervisor                               │
-│ IP: 16.144.20.78 (public), 100.x.x.x (Tailscale)               │
+│ IP: 35.92.20.130 (public), 100.x.x.x (Tailscale)               │
 │                                                                   │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
 │  │  br-vm1      │  │  br-vm2      │  │  br-vm3      │  ...     │
