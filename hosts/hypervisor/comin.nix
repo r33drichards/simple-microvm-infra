@@ -44,19 +44,35 @@
       # List of all VMs
       VMS="vm1 vm2 vm3 vm4 vm5"
 
-      echo "Checking for VM configuration updates..."
+      echo "Updating VM configuration symlinks and checking for changes..."
 
       for vm in $VMS; do
-        CURRENT="/var/lib/microvms/$vm/current"
-        BOOTED="/var/lib/microvms/$vm/booted"
+        VM_DIR="/var/lib/microvms/$vm"
+        CURRENT="$VM_DIR/current"
+        BOOTED="$VM_DIR/booted"
 
-        # Skip if directories don't exist yet
-        if [ ! -e "$CURRENT" ]; then
-          echo "  $vm: No current configuration found, skipping"
+        # Skip if VM directory doesn't exist
+        if [ ! -d "$VM_DIR" ]; then
+          echo "  $vm: VM directory not found, skipping"
           continue
         fi
 
-        # If booted doesn't exist or differs from current, restart is needed
+        # Find the new runner from the system configuration
+        # The install-microvm service has the path baked into its ExecStart
+        NEW_RUNNER=$(${pkgs.systemd}/bin/systemctl cat install-microvm-$vm.service 2>/dev/null | \
+          ${pkgs.gnugrep}/bin/grep -oP 'ln -sTf \K/nix/store/[^ ]+' | head -1)
+
+        if [ -z "$NEW_RUNNER" ]; then
+          echo "  $vm: Could not find new runner path, skipping"
+          continue
+        fi
+
+        # Update the current symlink to point to the new runner
+        echo "  $vm: Updating symlink to $NEW_RUNNER..."
+        ln -sTf "$NEW_RUNNER" "$CURRENT"
+        chown -h microvm:kvm "$CURRENT"
+
+        # Check if restart is needed
         if [ ! -e "$BOOTED" ] || [ "$(readlink -f "$CURRENT")" != "$(readlink -f "$BOOTED")" ]; then
           echo "  $vm: Configuration changed, restarting..."
           ${pkgs.systemd}/bin/systemctl restart microvm@$vm.service
