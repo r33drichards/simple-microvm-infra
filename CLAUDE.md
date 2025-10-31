@@ -103,13 +103,29 @@ Each VM has its own writable storage:
 - **Access**: Read-write
 - **Contents**: Logs, state files, databases, etc.
 
-### Why Not Disk Images?
+### Per-VM Dedicated Storage (64GB)
 
-This architecture uses shared filesystems instead of disk images:
-- **Efficiency**: No duplication of /nix/store across VMs
-- **Speed**: Fast boot times (no disk image to copy)
-- **Simplicity**: Direct filesystem access from hypervisor
-- **Nix-friendly**: Nix store can be safely shared read-only
+Each VM has a dedicated 64GB disk volume:
+- **Host Path**: `/var/lib/microvms/<vmname>/data.img`
+- **Mount Point**: `/mnt/storage` in guest
+- **Protocol**: virtio-blk (block device)
+- **Filesystem**: ext4
+- **Size**: 64GB (65536 MiB)
+- **Auto-creation**: Automatically created and formatted on first boot
+- **Benefits**:
+  - Dedicated storage space per VM
+  - Better I/O performance than virtiofs for large files
+  - Isolated from other VMs
+  - Suitable for databases, large files, and application data
+
+### Storage Architecture Summary
+
+This hybrid approach combines the best of both worlds:
+- **Efficiency**: No duplication of /nix/store across VMs (virtiofs)
+- **Speed**: Fast boot times with shared read-only store
+- **Isolation**: Each VM gets dedicated 64GB storage
+- **Performance**: Block device for high-performance I/O workloads
+- **Flexibility**: Small files in /var (virtiofs), large data in /mnt/storage (virtio-blk)
 
 ## Hypervisor Selection: QEMU
 
