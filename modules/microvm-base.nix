@@ -151,9 +151,9 @@ in
         "lowerdir=/nix/.ro-store"
         "upperdir=/mnt/storage/nix-upper"
         "workdir=/mnt/storage/nix-workdir"
-        "x-systemd.requires=mnt-storage.mount"
-        "x-systemd.after=mnt-storage.mount"
       ];
+      # Ensure /mnt/storage is mounted first
+      depends = [ "/mnt/storage" ];
     };
 
     # Configure journald for volatile storage (since /var is ephemeral)
