@@ -1,6 +1,6 @@
 # hosts/hypervisor/network.nix
 # Networking for hypervisor: bridges, NAT, isolation firewall
-# All VM network configuration is derived from modules/networks.nix
+# Uses networking.nftables.ruleset for atomic updates
 { config, pkgs, lib, ... }:
 
 let
@@ -10,36 +10,35 @@ let
   # Extract list of bridge names for easier iteration
   bridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge) networks.networks);
 
-  # Generate firewall rules to block all inter-VM traffic
+  # Generate nftables rules to block all inter-VM traffic
   # For each bridge, create rules to DROP traffic to all other bridges
   generateIsolationRules =
     let
-      # Get list of all bridge names
       allBridges = bridges;
     in
-    lib.concatStringsSep "\n" (
+    lib.concatStringsSep "\n      " (
       lib.flatten (
         map (sourceBridge:
           let
-            # Get all bridges except the source
             targetBridges = lib.filter (b: b != sourceBridge) allBridges;
           in
-          # Create DROP rules for this source to all other bridges
           map (targetBridge:
-            "      iptables -I FORWARD -i ${sourceBridge} -o ${targetBridge} -j DROP"
+            "iifname \"${sourceBridge}\" oifname \"${targetBridge}\" drop"
           ) targetBridges
         ) allBridges
       )
     );
+
+  # Generate list of bridge interfaces for nftables sets
+  bridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") bridges);
 in
 {
   # Create isolated bridges dynamically from networks.nix
-  # Each bridge has no physical interfaces attached (pure virtual)
   networking.bridges = lib.mapAttrs' (name: net:
     lib.nameValuePair net.bridge { interfaces = []; }
   ) networks.networks;
 
-  # Assign gateway IPs to bridges (host side gets .1 in each subnet)
+  # Assign gateway IPs to bridges
   networking.interfaces = lib.mapAttrs' (name: net:
     lib.nameValuePair net.bridge {
       ipv4.addresses = [{
@@ -49,40 +48,96 @@ in
     }
   ) networks.networks;
 
-  # Enable IP forwarding (required for NAT)
+  # Enable IP forwarding (required for NAT and VM routing)
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;
   };
 
-  # NAT: allow VMs to access internet through host
-  networking.nat = {
+  # Disable legacy iptables-based firewall and NAT
+  networking.firewall.enable = false;
+  networking.nat.enable = false;
+
+  # Use nftables with atomic ruleset updates
+  networking.nftables = {
     enable = true;
 
-    # IMPORTANT: Change this to your actual physical interface!
-    # Find with: ip link show
-    # Common names: eth0, ens3, enp0s3, wlan0
-    # AWS a1.metal uses: enP2p4s0
-    externalInterface = "enP2p4s0";
+    # Atomic ruleset - all rules updated together
+    # See https://wiki.nftables.org/ for documentation
+    ruleset = ''
+      # NAT table for internet access and IMDS forwarding
+      table ip nat {
+        # Prerouting: DNAT for IMDS requests from VMs
+        chain prerouting {
+          type nat hook prerouting priority dstnat; policy accept;
 
-    # VM bridges that should be NAT'd (generated from networks.nix)
-    internalInterfaces = bridges;
-  };
+          # Forward AWS Instance Metadata Service requests from VMs to hypervisor's IMDS
+          # Allows VMs to access EC2 instance role credentials at 169.254.169.254
+          ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 tcp dport 80 dnat to 169.254.169.254:80
+        }
 
-  # Firewall configuration
-  networking.firewall = {
-    enable = true;
+        # Postrouting: Masquerade for internet and IMDS
+        chain postrouting {
+          type nat hook postrouting priority srcnat; policy accept;
 
-    # Allow Tailscale traffic
-    trustedInterfaces = [ "tailscale0" ];
+          # Masquerade IMDS traffic so IMDS sees requests as coming from hypervisor
+          ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 masquerade
 
-    # Allow SSH from anywhere
-    allowedTCPPorts = [ 22 ];
+          # Masquerade VM traffic to internet via external interface (AWS a1.metal)
+          oifname "enP2p4s0" ip saddr 10.0.0.0/8 masquerade
+        }
+      }
 
-    # Block inter-VM traffic (maintain isolation)
-    # Each VM can reach internet but not other VMs
-    # Rules are generated dynamically from networks.nix
-    extraCommands = ''
-${generateIsolationRules}
+      # Filter table for firewall and isolation
+      table inet filter {
+        # Input: traffic to hypervisor
+        chain input {
+          type filter hook input priority filter; policy drop;
+
+          # Accept established/related connections
+          ct state { established, related } accept
+
+          # Accept loopback traffic
+          iifname "lo" accept
+
+          # Accept Tailscale VPN traffic
+          iifname "tailscale0" accept
+
+          # Accept SSH from anywhere
+          tcp dport 22 accept
+
+          # Accept traffic from VM bridges (for gateway/DNS services)
+          iifname { ${bridgeList} } accept
+
+          # Log and drop everything else
+          log prefix "INPUT DROP: " drop
+        }
+
+        # Forward: traffic between interfaces (VMs to internet, VM isolation)
+        chain forward {
+          type filter hook forward priority filter; policy drop;
+
+          # Accept established/related connections
+          ct state { established, related } accept
+
+          # Block inter-VM traffic (maintain isolation)
+          # Generated dynamically from networks.nix
+          ${generateIsolationRules}
+
+          # Accept VM to internet traffic
+          iifname { ${bridgeList} } oifname "enP2p4s0" accept
+
+          # Accept internet to VM traffic (return traffic only)
+          iifname "enP2p4s0" oifname { ${bridgeList} } ct state { established, related } accept
+
+          # Log and drop everything else
+          log prefix "FORWARD DROP: " drop
+        }
+
+        # Output: traffic from hypervisor
+        chain output {
+          type filter hook output priority filter; policy accept;
+        }
+      }
     '';
   };
 }

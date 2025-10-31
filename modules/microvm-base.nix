@@ -86,6 +86,16 @@ in
         DNS = "1.1.1.1";  # Cloudflare DNS
         DHCP = "no";
       };
+      # Route AWS Instance Metadata Service (IMDS) through gateway
+      # This allows VMs to access EC2 instance role credentials
+      routes = [
+        {
+          routeConfig = {
+            Destination = "169.254.169.254/32";
+            Gateway = "${vmNetwork.subnet}.1";
+          };
+        }
+      ];
     };
 
     # Basic system settings
