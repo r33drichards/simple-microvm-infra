@@ -66,6 +66,11 @@
                     # Load environment variables from secret file
                     # This file is created by fetch-vm1-secrets service on hypervisor
                     environmentFiles = [ "/run/secrets/sandbox.env" ];
+                    # Mount Claude Code configuration from VM into container
+                    # Uses ANTHROPIC_API_KEY from environmentFiles
+                    volumes = [
+                      "/home/robertwendt/.claude:/home/gem/.claude:ro"
+                    ];
                   };
                 };
               };
