@@ -144,6 +144,8 @@
     "d /var/lib/microvms/vm5 0755 microvm kvm -"
     # Create secrets directory for VM1 (root-only for security)
     "d /var/lib/microvms/vm1/secrets 0700 root root -"
+    # Create secrets directory for VM2 (root-only for security)
+    "d /var/lib/microvms/vm2/secrets 0700 root root -"
   ];
 
   # Fetch AWS Secrets Manager secrets for VM1 (runs on hypervisor)
@@ -165,6 +167,45 @@
       # Ensure secrets directory exists
       mkdir -p /var/lib/microvms/vm1/secrets
       chmod 700 /var/lib/microvms/vm1/secrets
+
+      # Fetch secret from AWS Secrets Manager
+      echo "Fetching secret '$SECRET_NAME' from AWS Secrets Manager..."
+      SECRET_JSON=$(${pkgs.awscli2}/bin/aws secretsmanager get-secret-value \
+        --secret-id "$SECRET_NAME" \
+        --region "$REGION" \
+        --query SecretString \
+        --output text)
+
+      # Parse JSON and write to env file
+      echo "Writing environment variables to $ENV_FILE..."
+      echo "$SECRET_JSON" | ${pkgs.jq}/bin/jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > "$ENV_FILE"
+
+      # Secure the file
+      chmod 600 "$ENV_FILE"
+
+      echo "Successfully fetched and wrote secrets to $ENV_FILE"
+    '';
+  };
+
+  # Fetch AWS Secrets Manager secrets for VM2 Claude Code (runs on hypervisor)
+  systemd.services.fetch-vm2-secrets = {
+    description = "Fetch AWS Secrets Manager secrets for VM2 Claude Code";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "microvm@vm2.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -euo pipefail
+
+      SECRET_NAME="claude-code-credentials"
+      REGION="us-west-2"
+      ENV_FILE="/var/lib/microvms/vm2/secrets/claude-code.env"
+
+      # Ensure secrets directory exists
+      mkdir -p /var/lib/microvms/vm2/secrets
+      chmod 700 /var/lib/microvms/vm2/secrets
 
       # Fetch secret from AWS Secrets Manager
       echo "Fetching secret '$SECRET_NAME' from AWS Secrets Manager..."

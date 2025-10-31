@@ -96,12 +96,31 @@
               # Open firewall for RDP
               networking.firewall.allowedTCPPorts = [ 3389 ];
 
-              # Install desktop utilities
+              # Mount secrets directory from hypervisor via virtiofs
+              # Secrets are fetched on hypervisor (which has AWS credentials)
+              # Note: /nix/store share is inherited from microvm-base.nix
+              microvm.shares = [
+                {
+                  source = "/var/lib/microvms/vm2/secrets";
+                  mountPoint = "/run/secrets";
+                  tag = "secrets";
+                  proto = "virtiofs";
+                }
+              ];
+
+              # Install desktop utilities and development tools
               environment.systemPackages = with pkgs; [
                 firefox
                 xfce.thunar
                 xfce.xfce4-terminal
+                nodejs  # Required for Claude Code
+                jq      # Required for parsing secrets
               ];
+
+              # Shell aliases
+              environment.shellAliases = {
+                "ccode" = "npx -y @anthropic-ai/claude-code --dangerously-skip-permissions";
+              };
 
               # Ensure robertwendt user can login via RDP
               users.users.robertwendt = {
@@ -123,7 +142,54 @@
               # NixOS doesn't create home directories for existing users during revival
               systemd.tmpfiles.rules = [
                 "d /home/robertwendt 0700 robertwendt users -"
+                # Create Claude Code config directory
+                "d /home/robertwendt/.config 0755 robertwendt users -"
+                "d /home/robertwendt/.config/claude-code 0755 robertwendt users -"
               ];
+
+              # Configure Claude Code settings.json with secrets from AWS Secrets Manager
+              systemd.services.setup-claude-code = {
+                description = "Setup Claude Code settings.json with AWS secrets";
+                wantedBy = [ "multi-user.target" ];
+                after = [ "network-online.target" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                };
+                script = ''
+                  set -euo pipefail
+
+                  SECRETS_FILE="/run/secrets/claude-code.env"
+                  CONFIG_DIR="/home/robertwendt/.config/claude-code"
+                  SETTINGS_FILE="$CONFIG_DIR/settings.json"
+
+                  # Wait for secrets to be available
+                  if [ ! -f "$SECRETS_FILE" ]; then
+                    echo "Warning: Secrets file not found at $SECRETS_FILE"
+                    exit 0
+                  fi
+
+                  # Source the secrets (they're in KEY=VALUE format)
+                  source "$SECRETS_FILE"
+
+                  # Ensure config directory exists
+                  mkdir -p "$CONFIG_DIR"
+
+                  # Create settings.json with credentials
+                  cat > "$SETTINGS_FILE" <<EOF
+                  {
+                    "sessionKey": "$ANTHROPIC_SESSION_KEY",
+                    "deviceId": "$ANTHROPIC_DEVICE_ID"
+                  }
+                  EOF
+
+                  # Set proper ownership
+                  chown -R robertwendt:users "$CONFIG_DIR"
+                  chmod 600 "$SETTINGS_FILE"
+
+                  echo "Successfully configured Claude Code settings.json"
+                '';
+              };
             })
           ];
         };
