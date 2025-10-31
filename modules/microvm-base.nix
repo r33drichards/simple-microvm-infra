@@ -162,6 +162,8 @@ in
           ".ssh"
           { directory = ".local/share"; mode = "0700"; }
           ".nix-defexpr"
+          # Claude Code configuration
+          { directory = ".claude"; mode = "0755"; }
         ];
         files = [
           ".bash_history"
@@ -190,5 +192,44 @@ in
 
     # Disable sudo password for convenience
     security.sudo.wheelNeedsPassword = false;
+
+    # Claude Code configuration setup
+    # NOTE: API key is stored in plain text - consider using sops-nix or agenix for production
+    systemd.services.setup-claude-code = {
+      description = "Set up Claude Code API key configuration";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "local-fs.target" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "robertwendt";
+      };
+
+      script = ''
+        # Create .claude directory if it doesn't exist
+        mkdir -p /home/robertwendt/.claude
+
+        # Create settings.json
+        cat > /home/robertwendt/.claude/settings.json << 'EOF'
+        {
+          "apiKeyHelper": "~/.claude/anthropic_key.sh"
+        }
+        EOF
+
+        # Create API key helper script
+        # NOTE: API key stored in plain text - use secrets management for production
+        cat > /home/robertwendt/.claude/anthropic_key.sh << 'EOF'
+        #!/bin/sh
+        echo "EORZYJoygCBtBGUVxr6cfPuCwMJSQfJeJCVaYe2jf6i3PyEb#EheCqj0wEAAlcrdL5mYmt-yX4UDCxyPkcbTfOh346eM"
+        EOF
+
+        # Make the script executable
+        chmod +x /home/robertwendt/.claude/anthropic_key.sh
+
+        # Ensure correct ownership
+        chown -R robertwendt:users /home/robertwendt/.claude
+      '';
+    };
   };
 }
