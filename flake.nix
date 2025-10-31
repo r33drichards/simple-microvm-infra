@@ -41,50 +41,16 @@
               networking.firewall.trustedInterfaces = [ "docker0" ];
               networking.firewall.allowedTCPPorts = [ 8080 ];
 
-              # Install AWS CLI and jq for secret fetching
-              environment.systemPackages = with nixpkgs.legacyPackages.aarch64-linux; [
-                awscli2
-                jq
+              # Mount secrets directory from hypervisor via virtiofs
+              # Secrets are fetched on hypervisor (which has AWS credentials)
+              microvm.shares = [
+                {
+                  source = "/var/lib/microvms/vm1/secrets";
+                  mountPoint = "/run/secrets";
+                  tag = "secrets";
+                  proto = "virtiofs";
+                }
               ];
-
-              # Create systemd service to fetch AWS Secrets Manager secret
-              systemd.services.fetch-aws-secrets = {
-                description = "Fetch secrets from AWS Secrets Manager";
-                wantedBy = [ "multi-user.target" ];
-                before = [ "docker-sandbox.service" ];
-                serviceConfig = {
-                  Type = "oneshot";
-                  RemainAfterExit = true;
-                };
-                script = ''
-                  set -euo pipefail
-
-                  SECRET_NAME="bmnixos"
-                  REGION="us-west-2"
-                  ENV_FILE="/run/secrets/sandbox.env"
-
-                  # Create secrets directory
-                  mkdir -p /run/secrets
-                  chmod 700 /run/secrets
-
-                  # Fetch secret from AWS Secrets Manager
-                  echo "Fetching secret from AWS Secrets Manager..."
-                  SECRET_JSON=$(${nixpkgs.legacyPackages.aarch64-linux.awscli2}/bin/aws secretsmanager get-secret-value \
-                    --secret-id "$SECRET_NAME" \
-                    --region "$REGION" \
-                    --query SecretString \
-                    --output text)
-
-                  # Parse JSON and write to env file
-                  echo "Writing environment variables to $ENV_FILE..."
-                  echo "$SECRET_JSON" | ${nixpkgs.legacyPackages.aarch64-linux.jq}/bin/jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > "$ENV_FILE"
-
-                  # Secure the file
-                  chmod 600 "$ENV_FILE"
-
-                  echo "Successfully fetched and wrote secrets to $ENV_FILE"
-                '';
-              };
 
               virtualisation.oci-containers = {
                 backend = "docker";
@@ -94,6 +60,7 @@
                     autoStart = true;
                     ports = [ "0.0.0.0:8080:8080" ];
                     # Load environment variables from secret file
+                    # This file is created by fetch-vm1-secrets service on hypervisor
                     environmentFiles = [ "/run/secrets/sandbox.env" ];
                   };
                 };
