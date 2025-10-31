@@ -136,10 +136,14 @@
               ];
 
               # Ensure robertwendt user can login via RDP
-              users.users.robertwendt.packages = with pkgs; [
-                xfce.xfce4-panel
-                xfce.xfce4-session
-              ];
+              users.users.robertwendt = {
+                # Set initial password for RDP login (change after first login)
+                initialPassword = "changeme";
+                packages = with pkgs; [
+                  xfce.xfce4-panel
+                  xfce.xfce4-session
+                ];
+              };
             }
           ];
         };
