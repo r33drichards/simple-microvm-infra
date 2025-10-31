@@ -11,7 +11,7 @@
       name = "origin";
       url = "https://github.com/r33drichards/simple-microvm-infra.git";
 
-      branches.main.name = "main";
+      branches.main.name = "master";
     }];
 
     # Note: postDeployHook is not yet supported in the current version of Comin
