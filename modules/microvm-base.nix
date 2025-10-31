@@ -113,6 +113,14 @@ in
     # Ensure Nix package is available
     nix.package = pkgs.nix;
 
+    # Enable Nix daemon for multi-user Nix operations
+    # Required for imperative package management with read-only /nix/store
+    systemd.services.nix-daemon = {
+      # Unmask the service (it's masked by default in MicroVMs)
+      enable = true;
+      wantedBy = [ "multi-user.target" ];
+    };
+
     # Environment variables for Nix to work with read-only store
     environment.variables = {
       # Tell Nix that the store is read-only
