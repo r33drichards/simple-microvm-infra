@@ -105,11 +105,17 @@
 
               # Ensure robertwendt user can login via RDP
               users.users.robertwendt = {
+                isNormalUser = true;  # Required to create home directory
+                extraGroups = [ "wheel" ];  # Preserve from base config
                 # Set initial password for RDP login (change after first login)
                 initialPassword = "changeme";
                 packages = with pkgs; [
                   xfce.xfce4-panel
                   xfce.xfce4-session
+                ];
+                # Preserve SSH keys from base config
+                openssh.authorizedKeys.keys = [
+                  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
                 ];
               };
             })
