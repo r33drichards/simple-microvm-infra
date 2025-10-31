@@ -11,11 +11,7 @@
       name = "origin";
       url = "https://github.com/r33drichards/simple-microvm-infra.git";
 
-      branches.main = {
-        name = "main";
-        # Tell Comin which NixOS configuration to deploy
-        nixosConfiguration = "hypervisor";
-      };
+      branches.main.name = "main";
     }];
 
     # Note: postDeployHook is not yet supported in the current version of Comin
