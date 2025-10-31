@@ -1,5 +1,25 @@
 {
   "nodes": {
+    "comin": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1760878206,
+        "narHash": "sha256-gafngMT6Dvgpr/awy+BGh65AcsGfbmK+vRzmpLnwoIc=",
+        "owner": "nlewo",
+        "repo": "comin",
+        "rev": "468e31918eff4ccc0d56fd7168f51be857d22193",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nlewo",
+        "repo": "comin",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -58,6 +78,7 @@
     },
     "root": {
       "inputs": {
+        "comin": "comin",
         "microvm": "microvm",
         "nixpkgs": "nixpkgs"
       }
