@@ -57,10 +57,17 @@
           continue
         fi
 
-        # Find the new runner from the system configuration
-        # The install-microvm service has the path baked into its ExecStart
-        NEW_RUNNER=$(${pkgs.systemd}/bin/systemctl cat install-microvm-$vm.service 2>/dev/null | \
-          ${pkgs.gnugrep}/bin/grep -oP 'ln -sTf \K/nix/store/[^ ]+' | head -1)
+        # Find the new runner from the install script
+        # First, get the ExecStart path from the service
+        INSTALL_SCRIPT=$(${pkgs.systemd}/bin/systemctl cat install-microvm-$vm.service 2>/dev/null | \
+          ${pkgs.gnugrep}/bin/grep '^ExecStart=' | ${pkgs.gnused}/bin/sed 's/^ExecStart=//' | ${pkgs.coreutils}/bin/tr -d ' ')
+
+        # Then read the runner path from the script
+        if [ -n "$INSTALL_SCRIPT" ] && [ -f "$INSTALL_SCRIPT" ]; then
+          NEW_RUNNER=$(${pkgs.gnugrep}/bin/grep -oP 'ln -sTf \K/nix/store/[^ ]+' "$INSTALL_SCRIPT" 2>/dev/null | head -1)
+        else
+          NEW_RUNNER=""
+        fi
 
         if [ -z "$NEW_RUNNER" ]; then
           echo "  $vm: Could not find new runner path, skipping"
