@@ -41,6 +41,17 @@
               networking.firewall.trustedInterfaces = [ "docker0" ];
               networking.firewall.allowedTCPPorts = [ 8080 ];
 
+              # Mount secrets directory from hypervisor via virtiofs
+              # Secrets are fetched on hypervisor (which has AWS credentials)
+              microvm.shares = [
+                {
+                  source = "/var/lib/microvms/vm1/secrets";
+                  mountPoint = "/run/secrets";
+                  tag = "secrets";
+                  proto = "virtiofs";
+                }
+              ];
+
               virtualisation.oci-containers = {
                 backend = "docker";
                 containers = {
@@ -48,10 +59,9 @@
                     image = "wholelottahoopla/sandbox:latest";
                     autoStart = true;
                     ports = [ "0.0.0.0:8080:8080" ];
-                    # Add environment variables if needed:
-                    # environment = {
-                    #   KEY = "value";
-                    # };
+                    # Load environment variables from secret file
+                    # This file is created by fetch-vm1-secrets service on hypervisor
+                    environmentFiles = [ "/run/secrets/sandbox.env" ];
                   };
                 };
               };
