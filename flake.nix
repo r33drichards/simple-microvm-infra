@@ -46,15 +46,8 @@
 
               # Mount secrets directory from hypervisor via virtiofs
               # Secrets are fetched on hypervisor (which has AWS credentials)
-              # Also mount shared /nix/store (must redefine since this overrides base)
+              # Note: /nix/store share is inherited from microvm-base.nix
               microvm.shares = [
-                {
-                  # Shared /nix/store (read-only, massive space savings)
-                  source = "/nix/store";
-                  mountPoint = "/nix/.ro-store";
-                  tag = "ro-store";
-                  proto = "virtiofs";
-                }
                 {
                   source = "/var/lib/microvms/vm1/secrets";
                   mountPoint = "/run/secrets";
