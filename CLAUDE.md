@@ -4,7 +4,7 @@ This document describes the architecture, design decisions, and technical detail
 
 ## System Overview
 
-This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and uses NixOS with the microvm.nix framework to manage 4 isolated virtual machines. The key characteristics:
+This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and uses NixOS with the microvm.nix framework to manage 5 isolated virtual machines. The key characteristics:
 
 - **Host Platform**: AWS a1.metal (aarch64-linux, ARM64 Graviton processors)
 - **Operating System**: NixOS 25.05 with flakes
@@ -12,6 +12,7 @@ This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and 
 - **Network Isolation**: Each VM has its own isolated bridge network
 - **Storage**: Shared read-only `/nix/store`, per-VM writable `/var`
 - **Remote Access**: Tailscale VPN with subnet routing
+- **Deployment**: GitOps automation via Comin (pull-based, automatic)
 
 ## Architecture Diagram
 
@@ -220,14 +221,103 @@ microvm -r vm1              # Run VM in foreground
 - Tailscale configuration
 
 **`hosts/hypervisor/network.nix`** - Network configuration:
-- Bridge interfaces (br-vm1 through br-vm4)
+- Bridge interfaces (br-vm1 through br-vm5)
 - NAT rules for internet access
 - IP forwarding
 
-**`hosts/vm1/default.nix`** through **`hosts/vm4/default.nix`** - Per-VM config:
+**`hosts/hypervisor/comin.nix`** - GitOps deployment automation:
+- Comin service configuration
+- Git repository and branch tracking
+- Post-deploy hooks for monitoring
+
+**`hosts/vm1/default.nix`** through **`hosts/vm5/default.nix`** - Per-VM config:
 - Hostname
 - Network assignment (which subnet)
 - VM-specific packages/services
+
+## Deployment Automation
+
+### GitOps with Comin
+
+This infrastructure uses **Comin** for automated, pull-based GitOps deployments:
+
+- **Pull-Based**: Hypervisor periodically polls the Git repository
+- **Automatic**: Deploys changes without manual intervention
+- **Safe**: Atomic NixOS updates with automatic rollback on failure
+- **Monitored**: Post-deploy hooks log all deployments to journald
+
+### How It Works
+
+1. **Poll**: Comin service polls GitHub repository every 60 seconds
+2. **Detect**: Identifies new commits on tracked branch (main)
+3. **Build**: Builds new NixOS configuration from updated flake
+4. **Deploy**: Performs atomic system switch (`nixos-rebuild switch`)
+5. **Verify**: Runs post-deploy hooks to log status and check VMs
+6. **Monitor**: Logs deployment info to journald for auditing
+
+### Deployment Workflow
+
+```
+Developer                GitHub                 Hypervisor
+    │                       │                       │
+    ├─ git push ──────────►│                       │
+    │                       │                       │
+    │                       │◄────── poll ─────────┤ (every 60s)
+    │                       │                       │
+    │                       ├─ new commit ────────►│
+    │                       │                       │
+    │                       │                       ├─ build config
+    │                       │                       │
+    │                       │                       ├─ nixos-rebuild switch
+    │                       │                       │
+    │                       │                       ├─ restart services/VMs
+    │                       │                       │
+    │                       │                       ├─ post-deploy hook
+    │                       │                       │
+    │                       │                       └─ log to journald
+    │                       │                       │
+```
+
+### Monitoring Deployments
+
+```bash
+# View Comin service status
+systemctl status comin
+
+# Monitor deployment logs in real-time
+journalctl -u comin -f
+
+# Check deployment history
+journalctl -t comin --since "1 day ago"
+
+# View last deployment
+journalctl -t comin | tail -20
+```
+
+### Post-Deploy Hooks
+
+The post-deploy hook automatically:
+- Logs deployment timestamp and commit hash
+- Checks status of all MicroVM services
+- Counts active VMs
+- Reports to journald for auditing
+
+### Safety Features
+
+- **Atomic Updates**: NixOS ensures all-or-nothing configuration changes
+- **Automatic Rollback**: Failed builds don't affect running system
+- **Generation History**: All previous configurations preserved for rollback
+- **Branch Protection**: Only authorized commits to main branch are deployed
+
+### Configuration
+
+Comin is configured in `hosts/hypervisor/comin.nix`:
+- **Repository**: https://github.com/r33drichards/simple-microvm-infra.git
+- **Branch**: main
+- **Poll Interval**: 60 seconds (default)
+- **Post-Deploy Hook**: Custom script for logging and monitoring
+
+For detailed deployment procedures and troubleshooting, see **DEPLOYMENT.md**.
 
 ## Design Decisions
 
@@ -364,6 +454,7 @@ Potential improvements to consider:
 ### External Documentation
 
 - [microvm.nix GitHub](https://github.com/astro/microvm.nix)
+- [Comin GitHub](https://github.com/nlewo/comin)
 - [NixOS Manual](https://nixos.org/manual/nixos/stable/)
 - [QEMU Documentation](https://www.qemu.org/docs/master/)
 - [Tailscale Subnet Routes](https://tailscale.com/kb/1019/subnets/)
@@ -372,8 +463,11 @@ Potential improvements to consider:
 
 - `modules/microvm-base.nix` - Core VM configuration
 - `hosts/hypervisor/network.nix` - Network architecture
+- `hosts/hypervisor/comin.nix` - GitOps deployment automation
 - `flake.nix` - System definitions
+- `DEPLOYMENT.md` - Deployment procedures and monitoring
 - `DEVELOPMENT.md` - Development workflow
+- `CLAUDE.md` - Architecture documentation (this file)
 
 ### Related Technologies
 
