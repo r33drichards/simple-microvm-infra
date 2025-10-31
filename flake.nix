@@ -101,6 +101,8 @@
                 firefox
                 xfce.thunar
                 xfce.xfce4-terminal
+                git
+                gh  # GitHub CLI
               ];
 
               # Ensure robertwendt user can login via RDP
