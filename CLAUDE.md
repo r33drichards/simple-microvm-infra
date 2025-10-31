@@ -10,7 +10,7 @@ This infrastructure runs on an AWS EC2 a1.metal instance (ARM64 bare metal) and 
 - **Operating System**: NixOS 25.05 with flakes
 - **Hypervisor**: QEMU (chosen for ARM64 virtio device support)
 - **Network Isolation**: Each VM has its own isolated bridge network
-- **Storage**: Shared read-only `/nix/store`, ephemeral `/var`, persistent 64GB `/mnt/storage` per VM
+- **Storage**: Shared read-only `/nix/store`, ephemeral `/var` (tmpfs), persistent 64GB `/mnt/storage` per VM
 - **Remote Access**: Tailscale VPN with subnet routing
 - **Deployment**: GitOps automation via Comin (pull-based, automatic)
 
@@ -96,15 +96,16 @@ All VMs share the hypervisor's `/nix/store` via virtiofs:
 - **Access**: Read-only
 - **Benefits**: Massive space savings (no duplication of packages)
 
-### Ephemeral /var
+### Per-VM /var (Ephemeral)
 
 Each VM has an ephemeral `/var` directory:
-- **Storage**: In-memory tmpfs (lost on reboot)
+- **Type**: tmpfs (in-memory filesystem)
 - **Mount Point**: `/var` in guest
-- **Protocol**: tmpfs (RAM-based filesystem)
 - **Access**: Read-write
 - **Contents**: Temporary logs, runtime state, caches
-- **Journald**: Configured for volatile storage (logs kept in memory, max 100MB)
+- **Persistence**: **Data is lost on reboot** - /var is cleared on VM restart
+- **Benefits**: Fast I/O, simplified architecture, no persistent state to manage
+- **Note**: All persistent data must be stored in `/mnt/storage` instead
 
 ### Per-VM Dedicated Storage (64GB)
 
@@ -126,10 +127,10 @@ Each VM has a dedicated 64GB disk volume:
 This hybrid approach combines the best of both worlds:
 - **Efficiency**: No duplication of /nix/store across VMs (virtiofs)
 - **Speed**: Fast boot times with shared read-only store
-- **Simplicity**: Ephemeral /var reduces complexity and ensures clean VM state on each boot
-- **Isolation**: Each VM gets dedicated 64GB persistent storage at `/mnt/storage`
+- **Simplicity**: Ephemeral /var (tmpfs) eliminates persistent state management
+- **Persistence**: All stateful data stored in dedicated 64GB volume at `/mnt/storage`
 - **Performance**: Block device (virtio-blk) for high-performance I/O workloads
-- **Immutability**: VMs start fresh on reboot, aligning with immutable infrastructure principles
+- **Isolation**: Each VM gets its own dedicated storage, independent of other VMs
 
 ## Hypervisor Selection: QEMU
 
@@ -196,7 +197,7 @@ microvm.nix is a NixOS framework for running lightweight VMs:
 - `current/` - symlink to the current runner
 - `booted/` - symlink to the runner currently running
 - `flake` - path to the flake used to build this VM
-- `var/` - the VM's writable /var filesystem
+- `data.img` - the VM's 64GB persistent storage volume
 
 ### Management Commands
 
@@ -223,7 +224,8 @@ microvm -r vm1              # Run VM in foreground
 **`modules/microvm-base.nix`** - Base configuration for all VMs:
 - Hypervisor selection (QEMU)
 - Kernel modules for ARM64
-- Virtiofs shares (/nix/store, /var)
+- Virtiofs shares (/nix/store only - /var is ephemeral tmpfs)
+- Virtio-blk volume (/mnt/storage - 64GB persistent storage)
 - TAP network interface
 - Static IP configuration
 - User accounts (root, robertwendt)
@@ -498,9 +500,9 @@ VMs use static IP configuration rather than DHCP:
 ### Resource Usage
 
 Per VM (approximate):
-- **Memory**: 1GB allocated (configurable)
+- **Memory**: 1GB allocated (configurable), plus tmpfs /var uses some RAM
 - **CPU**: Shared with hypervisor (no pinning)
-- **Disk**: ~10-50MB in /var (most data is shared /nix/store)
+- **Disk**: 64GB persistent volume at /mnt/storage (most binaries are shared /nix/store)
 - **Overhead**: ~100-200MB RAM per VM for QEMU
 
 Hypervisor (a1.metal):
@@ -526,7 +528,7 @@ Potential improvements to consider:
 
 1. **Inter-VM Networking**: Add routing to allow VMs to communicate directly
 2. **Monitoring**: Add Prometheus/Grafana for metrics
-3. **Backup**: Automated snapshots of VM /var directories
+3. **Backup**: Automated snapshots of VM data volumes (/mnt/storage)
 4. **CI/CD**: Automated testing of configuration changes
 5. **Secrets Management**: Use sops-nix or agenix for secrets
 6. **Resource Limits**: Configure CPU/memory limits per VM
