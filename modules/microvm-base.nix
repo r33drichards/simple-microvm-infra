@@ -133,6 +133,10 @@ in
     # Tmpfiles rules for persistent directories
     systemd.tmpfiles.rules = [
       "d /mnt/storage/persist 0755 root root -"
+      # Create Nix overlay directories with proper permissions
+      "d /mnt/storage/nix-overlay 0755 root root -"
+      "d /mnt/storage/nix-overlay/store 0755 root root -"
+      "d /mnt/storage/nix-overlay/work 0755 root root -"
       # Create Nix state directories with proper permissions
       "d /nix/var 0755 root root -"
       "d /nix/var/nix 0755 root root -"
@@ -223,5 +227,56 @@ in
 
     # Disable sudo password for convenience
     security.sudo.wheelNeedsPassword = false;
+
+    # Debug service to log overlay state on boot
+    systemd.services.nix-overlay-debug = {
+      description = "Log Nix overlay state for debugging";
+      after = [ "local-fs.target" "nix-store.mount" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        echo "=== Nix Overlay Debug Info ==="
+        echo "Timestamp: $(date)"
+        echo ""
+        echo "Overlay mount status:"
+        mount | grep '/nix/store'
+        echo ""
+        echo "Overlay directory contents:"
+        ls -la /mnt/storage/nix-overlay/ || echo "Directory doesn't exist"
+        ls -la /mnt/storage/nix-overlay/store/ 2>/dev/null | head -20 || echo "Store directory empty or doesn't exist"
+        echo ""
+        echo "Overlay upper layer file count:"
+        find /mnt/storage/nix-overlay/store -type f 2>/dev/null | wc -l || echo "0"
+        echo ""
+        echo "Disk usage:"
+        du -sh /mnt/storage/nix-overlay/* 2>/dev/null || echo "No data"
+        echo "=== End Debug Info ==="
+      '';
+    };
+
+    # Helper script for users to check overlay status
+    environment.systemPackages = with pkgs; [
+      (pkgs.writeScriptBin "nix-overlay-status" ''
+        #!${pkgs.bash}/bin/bash
+        echo "=== Nix Overlay Status ==="
+        echo "Overlay mount:"
+        mount | grep '/nix/store'
+        echo ""
+        echo "Upper layer path count:"
+        find /mnt/storage/nix-overlay/store -type d 2>/dev/null | wc -l
+        echo ""
+        echo "Upper layer size:"
+        du -sh /mnt/storage/nix-overlay/store 2>/dev/null || echo "0"
+        echo ""
+        echo "User profiles:"
+        ls -la ~/.nix-profile 2>/dev/null || echo "No profile"
+        echo ""
+        echo "Nix DB registrations:"
+        nix path-info --all --store local 2>/dev/null | wc -l || echo "Error querying store"
+      '')
+    ];
   };
 }
