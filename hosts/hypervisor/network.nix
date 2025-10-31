@@ -123,6 +123,9 @@ in
           # Generated dynamically from networks.nix
           ${generateIsolationRules}
 
+          # Accept Tailscale to VM traffic (allow remote access via VPN)
+          iifname "tailscale0" oifname { ${bridgeList} } accept
+
           # Accept VM to internet traffic
           iifname { ${bridgeList} } oifname "enP2p4s0" accept
 
