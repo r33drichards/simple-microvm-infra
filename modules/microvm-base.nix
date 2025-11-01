@@ -65,7 +65,6 @@ in
         fsType = "ext4";
         mountPoint = "/persist";
         label = "${config.networking.hostName}-data";
-        neededForBoot = true;  # Required by impermanence module
       }
     ];
 
@@ -75,6 +74,9 @@ in
       fsType = "tmpfs";
       options = [ "defaults" "size=2G" "mode=755" ];
     };
+
+    # Mark /persist as needed for boot (required by impermanence module)
+    fileSystems."/persist".neededForBoot = true;
 
     # Manual bind mount for Nix database (impermanence doesn't support custom mount points)
     fileSystems."/nix/var" = {
