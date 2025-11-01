@@ -65,6 +65,7 @@ in
         fsType = "ext4";
         mountPoint = "/persist";
         label = "${config.networking.hostName}-data";
+        neededForBoot = true;  # Required by impermanence module
       }
     ];
 
