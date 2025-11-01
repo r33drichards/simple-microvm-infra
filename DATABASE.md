@@ -2,20 +2,22 @@
 
 ## Overview
 
-The hypervisor runs a PostgreSQL database for session management that can be accessed from all VMs.
+The hypervisor runs a PostgreSQL database for session management that is only accessible locally on the hypervisor.
 
 **What's Provisioned**:
 - PostgreSQL 15 server
 - Database: `sessiondb`
 - User: `sessionuser` with password authentication
-- Network access from all VM subnets
+- Local-only access (no VM network access)
 - Automated daily backups
 
 **Schema Initialization**: The database schema is NOT automatically initialized by NixOS. Your application is responsible for creating tables, indexes, and other schema objects.
 
 ## Connection Details
 
-- **Host**: 10.1.0.1 (from VM1), 10.2.0.1 (from VM2), etc. (the gateway IP for each VM)
+**Access**: Local connections on hypervisor only (VMs cannot connect)
+
+- **Host**: localhost or 127.0.0.1
 - **Port**: 5432 (default PostgreSQL port)
 - **Database**: `sessiondb`
 - **User**: `sessionuser`
@@ -93,37 +95,37 @@ CREATE TRIGGER update_session_updated_at
 **To apply this schema**:
 
 ```bash
-# From hypervisor
+# From hypervisor as postgres user
 sudo -u postgres psql -d sessiondb < schema.sql
 
-# Or interactively from a VM
-psql -h 10.1.0.1 -U sessionuser -d sessiondb
+# Or interactively
+sudo -u postgres psql -d sessiondb
 # Then paste the SQL script
 ```
 
 ## Connection Examples
 
-### From VM1 (PostgreSQL CLI)
+### PostgreSQL CLI (on Hypervisor)
 
 ```bash
-# Install psql client on VM
-nix-shell -p postgresql
+# Connect as postgres user (peer authentication)
+sudo -u postgres psql -d sessiondb
 
-# Connect to database
-psql -h 10.1.0.1 -p 5432 -U sessionuser -d sessiondb
+# Or connect as sessionuser with password
+psql -h localhost -p 5432 -U sessionuser -d sessiondb
 # Password: sessionpass123
 ```
 
-### From VM (Python with psycopg2)
+### Python with psycopg2 (on Hypervisor)
 
 ```python
 import psycopg2
 import json
 from datetime import datetime
 
-# Connect to database
+# Connect to database (runs on hypervisor)
 conn = psycopg2.connect(
-    host="10.1.0.1",  # Use appropriate gateway IP for your VM
+    host="localhost",
     port=5432,
     database="sessiondb",
     user="sessionuser",
@@ -158,13 +160,13 @@ cur.close()
 conn.close()
 ```
 
-### From VM (Node.js with pg)
+### Node.js with pg (on Hypervisor)
 
 ```javascript
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  host: '10.1.0.1',  // Use appropriate gateway IP for your VM
+  host: 'localhost',
   port: 5432,
   database: 'sessiondb',
   user: 'sessionuser',
@@ -196,7 +198,7 @@ async function getSessions() {
 createSession().then(getSessions).finally(() => pool.end());
 ```
 
-### From VM (Go with pgx)
+### Go with pgx (on Hypervisor)
 
 ```go
 package main
@@ -211,7 +213,7 @@ import (
 func main() {
     // Connect to database
     conn, err := pgx.Connect(context.Background(),
-        "postgres://sessionuser:sessionpass123@10.1.0.1:5432/sessiondb")
+        "postgres://sessionuser:sessionpass123@localhost:5432/sessiondb")
     if err != nil {
         panic(err)
     }
@@ -253,15 +255,14 @@ func main() {
 
 ## Network Access
 
-The PostgreSQL database is accessible from all VM networks:
+The PostgreSQL database is configured for local-only access:
 
-- From VM1: Connect to `10.1.0.1:5432`
-- From VM2: Connect to `10.2.0.1:5432`
-- From VM3: Connect to `10.3.0.1:5432`
-- From VM4: Connect to `10.4.0.1:5432`
-- From VM5: Connect to `10.5.0.1:5432`
+- **Listening on**: localhost (127.0.0.1)
+- **Port**: 5432
+- **Firewall**: Port 5432 is NOT exposed on any external interface
+- **VM Access**: VMs cannot connect to the database
 
-The firewall on the hypervisor allows connections from all VM subnets (10.1-5.0.0/24).
+Only applications running on the hypervisor can connect to the database.
 
 ## Security Notes
 
@@ -271,11 +272,11 @@ The firewall on the hypervisor allows connections from all VM subnets (10.1-5.0.
 
 2. **Use a secrets manager**: In production, store the password in AWS Secrets Manager or similar, not in the NixOS configuration.
 
-3. **Network isolation**: The database is only accessible from VM networks, not from the public internet.
+3. **Local-only access**: The database is only accessible from the hypervisor itself (localhost). VMs and external networks cannot connect.
 
-4. **Connection encryption**: Consider enabling SSL/TLS for PostgreSQL connections in production.
+4. **Least privilege**: Create additional users with restricted permissions for different applications if needed.
 
-5. **Least privilege**: Create additional users with restricted permissions for different applications if needed.
+5. **Backup security**: Database backups are stored locally at `/var/backup/postgresql/`. Ensure proper file permissions and consider encrypting backups if they contain sensitive data.
 
 ## Managing the Database
 
@@ -480,26 +481,27 @@ WHERE state = 'active' AND now() - pg_stat_activity.query_start > interval '5 se
 
 ## Troubleshooting
 
-### Can't connect from VM
+### Can't connect to database
 
-1. Check if PostgreSQL is running on hypervisor:
+1. Check if PostgreSQL is running:
    ```bash
    sudo systemctl status postgresql
    ```
 
-2. Check if firewall allows connections:
+2. Check if PostgreSQL is listening on localhost:
    ```bash
-   sudo iptables -L -n | grep 5432
+   sudo ss -tlnp | grep 5432
+   # Should show: 127.0.0.1:5432
    ```
 
-3. Check if VM can reach hypervisor gateway:
-   ```bash
-   ping 10.1.0.1  # Use your VM's gateway IP
-   ```
-
-4. Check PostgreSQL logs:
+3. Check PostgreSQL logs:
    ```bash
    sudo journalctl -u postgresql -f
+   ```
+
+4. Test connection as postgres user:
+   ```bash
+   sudo -u postgres psql -c "SELECT 1"
    ```
 
 ### Password authentication fails

@@ -7,13 +7,13 @@
     enable = true;
     package = pkgs.postgresql_15;
 
-    # Listen on all interfaces so VMs can connect
+    # Listen only on localhost (no VM access)
     enableTCPIP = true;
 
     # PostgreSQL configuration
     settings = {
-      # Listen on all interfaces
-      listen_addresses = "*";
+      # Listen only on localhost
+      listen_addresses = "localhost";
 
       # Connection limits
       max_connections = 100;
@@ -24,7 +24,7 @@
     };
 
     # Authentication configuration
-    # Allow password auth from VM network ranges
+    # Only allow local connections
     authentication = pkgs.lib.mkOverride 10 ''
       # TYPE  DATABASE        USER            ADDRESS                 METHOD
 
@@ -33,13 +33,6 @@
 
       # IPv4 local connections:
       host    all             all             127.0.0.1/32            scram-sha-256
-
-      # Allow VMs to connect
-      host    sessiondb       sessionuser     10.1.0.0/24             scram-sha-256
-      host    sessiondb       sessionuser     10.2.0.0/24             scram-sha-256
-      host    sessiondb       sessionuser     10.3.0.0/24             scram-sha-256
-      host    sessiondb       sessionuser     10.4.0.0/24             scram-sha-256
-      host    sessiondb       sessionuser     10.5.0.0/24             scram-sha-256
     '';
 
     # Database initialization
@@ -52,9 +45,6 @@
       }
     ];
   };
-
-  # Open PostgreSQL port in firewall for VM networks
-  networking.firewall.allowedTCPPorts = [ 5432 ];
 
   # PostgreSQL automated backups
   services.postgresqlBackup = {
