@@ -41,6 +41,9 @@
           modules = [
             ./modules/desktop-vm.nix
             {
+              # Increase memory for build workloads (Chrome uses a lot)
+              microvm.mem = 12288;  # 12GB in MB
+
               # Enable Docker
               virtualisation.docker.enable = true;
 
