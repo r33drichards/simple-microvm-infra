@@ -227,5 +227,38 @@ in
 
     # Disable sudo password for convenience
     security.sudo.wheelNeedsPassword = false;
+
+    # Swap file configuration (4GB on persistent storage)
+    # Helps prevent OOM crashes during memory spikes
+    swapDevices = [{
+      device = "/persist/swapfile";
+      size = 4096;  # 4GB in MB
+    }];
+
+    # Ensure swap file is created on boot if it doesn't exist
+    systemd.services.create-swapfile = {
+      description = "Create swap file on persistent storage";
+      wantedBy = [ "swap.target" ];
+      before = [ "swap.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        set -e
+        SWAPFILE="/persist/swapfile"
+
+        # Only create if it doesn't exist
+        if [ ! -f "$SWAPFILE" ]; then
+          echo "Creating 4GB swap file at $SWAPFILE..."
+          ${pkgs.util-linux}/bin/fallocate -l 4G "$SWAPFILE"
+          chmod 600 "$SWAPFILE"
+          ${pkgs.util-linux}/bin/mkswap "$SWAPFILE"
+          echo "Swap file created successfully"
+        else
+          echo "Swap file already exists at $SWAPFILE"
+        fi
+      '';
+    };
   };
 }
