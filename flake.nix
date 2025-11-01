@@ -18,9 +18,14 @@
       url = "github:nlewo/comin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Impermanence for ephemeral root filesystem
+    impermanence = {
+      url = "github:nix-community/impermanence";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm, comin }:
+  outputs = { self, nixpkgs, microvm, comin, impermanence }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -133,6 +138,6 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm playwright-mcp; };
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm impermanence playwright-mcp; };
     };
 }
