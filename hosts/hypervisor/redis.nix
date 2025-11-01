@@ -10,12 +10,16 @@
       port = 6379;
       bind = "127.0.0.1";
 
-      # Enable AOF (Append-Only File) persistence
+      # Enable AOF (Append-Only File) persistence for durability
       appendOnly = true;
       appendFsync = "everysec"; # Options: no, always, everysec
 
-      # Disable RDB snapshots since we're using AOF
-      save = [];
+      # Enable RDB snapshots for fast restarts and backups
+      save = [
+        [900 1]      # Save after 900 seconds (15 min) if at least 1 key changed
+        [300 10]     # Save after 300 seconds (5 min) if at least 10 keys changed
+        [60 10000]   # Save after 60 seconds (1 min) if at least 10000 keys changed
+      ];
 
       # Additional settings for reliability
       settings = {
@@ -34,12 +38,16 @@
       port = 6380;
       bind = "127.0.0.1";
 
-      # Enable AOF (Append-Only File) persistence
+      # Enable AOF (Append-Only File) persistence for durability
       appendOnly = true;
       appendFsync = "everysec"; # Options: no, always, everysec
 
-      # Disable RDB snapshots since we're using AOF
-      save = [];
+      # Enable RDB snapshots for fast restarts and backups
+      save = [
+        [900 1]      # Save after 900 seconds (15 min) if at least 1 key changed
+        [300 10]     # Save after 300 seconds (5 min) if at least 10 keys changed
+        [60 10000]   # Save after 60 seconds (1 min) if at least 10000 keys changed
+      ];
 
       # Additional settings for reliability
       settings = {
