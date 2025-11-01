@@ -67,12 +67,6 @@
     pgdumpOptions = "-C";
   };
 
-  # Create backup directory with proper permissions
-  systemd.tmpfiles.rules = [
-    "d /var/backup 0755 root root -"
-    "d /var/backup/postgresql 0755 postgres postgres -"
-  ];
-
   # Set password for sessionuser
   # This should be done separately for security, but for initial setup:
   systemd.services.set-sessionuser-password = {
