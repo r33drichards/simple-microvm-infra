@@ -24,7 +24,8 @@ pkgs.buildNpmPackage rec {
   # Wrap the executable to set environment variables at runtime
   postInstall = ''
     wrapProgram $out/bin/mcp-server-playwright \
-      --set PLAYWRIGHT_BROWSERS_PATH "${pkgs.playwright-driver.browsers}" \
-      --set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD "1"
+      --set PLAYWRIGHT_BROWSERS_PATH "0" \
+      --set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD "1" \
+      --set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH "${pkgs.chromium}/bin/chromium"
   '';
 }
