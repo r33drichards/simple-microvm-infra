@@ -138,7 +138,7 @@ EOF
     "playwright": {
       "type": "stdio",
       "command": "${playwright-mcp}/bin/mcp-server-playwright",
-      "args": [],
+      "args": ["--executable-path", "${pkgs.chromium}/bin/chromium"],
       "env": {}
     }
   }
