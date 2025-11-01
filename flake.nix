@@ -28,6 +28,12 @@
 
   outputs = { self, nixpkgs, microvm, comin, home-manager }:
     let
+      system = "aarch64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+
+      # Custom packages
+      playwright-mcp = pkgs.callPackage ./pkgs/playwright-mcp {};
+
       # VM definitions - add/remove VMs here
       # Each VM gets its own isolated network (10.X.0.0/24)
       vms = {
@@ -118,6 +124,11 @@
       ) vms;
 
     in {
+      # Custom packages
+      packages.${system} = {
+        inherit playwright-mcp;
+      };
+
       # All system configurations
       nixosConfigurations = {
         # Hypervisor (physical host)
@@ -133,6 +144,6 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm home-manager; };
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm home-manager playwright-mcp; };
     };
 }
