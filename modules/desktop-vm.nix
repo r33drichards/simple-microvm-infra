@@ -76,9 +76,20 @@
     '';
   };
 
-  # Create apiKeyHelper script and .claude/settings.json on activation
-  system.activationScripts.setup-claude-code = {
-    text = ''
+  # Systemd service to set up Claude Code configuration files
+  # This must run AFTER /home is mounted (unlike activation scripts)
+  systemd.services.setup-claude-code = {
+    description = "Setup Claude Code configuration files";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "local-fs.target" ];  # Run after all local filesystems are mounted
+    before = [ "fetch-claude-secrets.service" ];  # Run before secrets are fetched
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -e
+
       # Create apiKeyHelper script
       mkdir -p /home/robertwendt
       cat > /home/robertwendt/apiKeyHelper <<'EOF'
@@ -111,6 +122,8 @@ EOF
       chown -R robertwendt:users /home/robertwendt/.claude
       chmod 755 /home/robertwendt/.claude
       chmod 644 /home/robertwendt/.claude/settings.json
+
+      echo "Claude Code configuration created successfully"
     '';
   };
 
