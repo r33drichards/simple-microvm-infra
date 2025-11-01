@@ -55,31 +55,33 @@ in
     }];
 
     # Dedicated disk volume per VM (virtio-blk for performance)
-    # Mounted at /var for persistent state (logs, systemd, Nix DB, etc.)
+    # Mounted at /persist for persistent state (with impermanence)
     microvm.volumes = [
       {
-        # Data volume - persistent /var and overlay upper layer
+        # Data volume - persistent storage for impermanence
         image = "/var/lib/microvms/${config.networking.hostName}/data.img";
         size = 65536;  # 64GB
         autoCreate = true;
         fsType = "ext4";
-        mountPoint = "/var";
+        mountPoint = "/persist";
         label = "${config.networking.hostName}-data";
       }
     ];
 
-    # Bind-mount /nix/var to persistent storage
-    # This is required for Nix database to persist across reboots
-    fileSystems."/nix/var" = {
-      device = "/var/nix-state";
-      options = [ "bind" ];
+    # Root filesystem as tmpfs (ephemeral, cleared on reboot)
+    fileSystems."/" = {
+      device = "tmpfs";
+      fsType = "tmpfs";
+      options = [ "defaults" "size=2G" "mode=755" ];
     };
 
-    # Bind-mount /home to persistent storage
-    # This is required for user profiles (~/.local/state/nix) to persist across reboots
-    fileSystems."/home" = {
-      device = "/var/home";
+    # Manual bind mount for Nix database (impermanence doesn't support custom mount points)
+    fileSystems."/nix/var" = {
+      depends = [ "/persist" ];
+      device = "/persist/nix-state";
+      fsType = "none";
       options = [ "bind" ];
+      neededForBoot = true;
     };
 
     # TAP network interface
@@ -146,22 +148,51 @@ in
     # Enable writable /nix/store using microvm.nix's built-in overlay feature
     # This creates an overlay with:
     # - Lower layer: shared read-only /nix/.ro-store from host (virtiofs)
-    # - Upper layer: writable /var/nix-overlay/store (on persistent volume)
-    # - Work dir: /var/nix-overlay/work (on persistent volume)
-    microvm.writableStoreOverlay = "/var/nix-overlay";
+    # - Upper layer: writable /persist/nix-overlay/store (on persistent volume)
+    # - Work dir: /persist/nix-overlay/work (on persistent volume)
+    microvm.writableStoreOverlay = "/persist/nix-overlay";
 
-    # Tmpfiles rules to create Nix overlay directories
-    # Note: /var is now on persistent volume, so these persist across reboots
+    # Tmpfiles rules to ensure directories exist in /persist
     systemd.tmpfiles.rules = [
-      # Nix overlay directories
-      "d /var/nix-overlay 0755 root root -"
-      "d /var/nix-overlay/store 0755 root root -"
-      "d /var/nix-overlay/work 0755 root root -"
-      # Nix state directory for bind mount
-      "d /var/nix-state 0755 root root -"
-      # Home directory for bind mount
-      "d /var/home 0755 root root -"
+      "d /persist/nix-state 0755 root root -"
+      "d /persist/nix-overlay 0755 root root -"
     ];
+
+    # Impermanence configuration - defines what persists across reboots
+    environment.persistence."/persist" = {
+      hideMounts = true;
+      directories = [
+        # System state
+        "/var/log"
+        "/var/lib/systemd"
+        "/var/lib/nixos"
+
+        # Docker (for VMs with Docker enabled)
+        "/var/lib/docker"
+      ];
+      files = [
+        # Machine ID for consistent systemd identity
+        "/etc/machine-id"
+      ];
+      users.robertwendt = {
+        directories = [
+          # User home directory
+          { directory = ".local"; mode = "0755"; }
+          { directory = ".config"; mode = "0755"; }
+          { directory = ".cache"; mode = "0755"; }
+          # Desktop-specific
+          { directory = ".mozilla"; mode = "0755"; }
+          { directory = ".ssh"; mode = "0700"; }
+          # MCP and Claude Code
+          { directory = ".claude"; mode = "0755"; }
+          "Downloads"
+          "Documents"
+        ];
+        files = [
+          ".bash_history"
+        ];
+      };
+    };
 
     # Allow root login with password (for learning/setup)
     # CHANGE THIS in production!
