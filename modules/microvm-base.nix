@@ -187,6 +187,7 @@ in
           { directory = ".claude"; mode = "0755"; }
           "Downloads"
           "Documents"
+          "workspace"
         ];
         files = [
           ".bash_history"
