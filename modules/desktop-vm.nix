@@ -82,11 +82,11 @@
   };
 
   # Systemd service to set up Claude Code configuration files
-  # This must run AFTER /home is mounted and home-manager activation
+  # This must run AFTER /home is mounted
   systemd.services.setup-claude-code = {
     description = "Setup Claude Code configuration files";
     wantedBy = [ "multi-user.target" ];
-    after = [ "local-fs.target" "home-manager-robertwendt.service" ];  # Run after filesystem and home-manager
+    after = [ "local-fs.target" ];  # Run after filesystem
     before = [ "fetch-claude-secrets.service" ];  # Run before secrets are fetched
     serviceConfig = {
       Type = "oneshot";
