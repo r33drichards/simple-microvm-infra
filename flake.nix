@@ -105,6 +105,8 @@
                 awscli2
                 jq
                 nodejs
+                git
+                gh  # GitHub CLI
               ];
 
               # Add ccode alias for easy Claude Code access
