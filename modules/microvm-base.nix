@@ -203,6 +203,7 @@ in
         ];
         files = [
           ".bash_history"
+          ".config/gh/hosts.yml"
         ];
       };
     };
