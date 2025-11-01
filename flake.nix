@@ -18,9 +18,15 @@
       url = "github:nlewo/comin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Home Manager for user environment management
+    home-manager = {
+      url = "github:nix-community/home-manager/release-25.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm, comin }:
+  outputs = { self, nixpkgs, microvm, comin, home-manager }:
     let
       # VM definitions - add/remove VMs here
       # Each VM gets its own isolated network (10.X.0.0/24)
@@ -75,21 +81,24 @@
           ];
         };
         vm3 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
+          # Remote desktop VM with browser access (XRDP + XFCE) + Home Manager
           modules = [
             ./modules/desktop-vm.nix
+            ./modules/home-manager.nix
           ];
         };
         vm4 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
+          # Remote desktop VM with browser access (XRDP + XFCE) + Home Manager
           modules = [
             ./modules/desktop-vm.nix
+            ./modules/home-manager.nix
           ];
         };
         vm5 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
+          # Remote desktop VM with browser access (XRDP + XFCE) + Home Manager
           modules = [
             ./modules/desktop-vm.nix
+            ./modules/home-manager.nix
           ];
         };
       };
@@ -122,6 +131,6 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm; };
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm home-manager; };
     };
 }
