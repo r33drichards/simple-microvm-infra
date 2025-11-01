@@ -32,9 +32,10 @@
       # Each VM gets its own isolated network (10.X.0.0/24)
       vms = {
         vm1 = {
-          # Docker-enabled VM with sandbox container + Desktop environment
+          # Docker-enabled VM with sandbox container + Desktop environment + Home Manager
           modules = [
             ./modules/desktop-vm.nix
+            ./modules/home-manager.nix
             {
               # Enable Docker
               virtualisation.docker.enable = true;
@@ -75,9 +76,10 @@
           ];
         };
         vm2 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
+          # Remote desktop VM with browser access (XRDP + XFCE) + Home Manager
           modules = [
             ./modules/desktop-vm.nix
+            ./modules/home-manager.nix
           ];
         };
         vm3 = {
