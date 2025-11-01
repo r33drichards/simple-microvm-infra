@@ -4,6 +4,15 @@
 
 The hypervisor runs a PostgreSQL database for session management that can be accessed from all VMs.
 
+**What's Provisioned**:
+- PostgreSQL 15 server
+- Database: `sessiondb`
+- User: `sessionuser` with password authentication
+- Network access from all VM subnets
+- Automated daily backups
+
+**Schema Initialization**: The database schema is NOT automatically initialized by NixOS. Your application is responsible for creating tables, indexes, and other schema objects.
+
 ## Connection Details
 
 - **Host**: 10.1.0.1 (from VM1), 10.2.0.1 (from VM2), etc. (the gateway IP for each VM)
@@ -12,7 +21,13 @@ The hypervisor runs a PostgreSQL database for session management that can be acc
 - **User**: `sessionuser`
 - **Password**: `sessionpass123` (⚠️ Change this in production!)
 
-## Schema
+## Schema Initialization
+
+The NixOS configuration provisions the PostgreSQL database but does not initialize the schema. You need to create the schema manually or through your application's migration system.
+
+### Example Schema: Session Table
+
+Below is an example schema for a session management table. You can use this as a reference or modify it for your needs:
 
 ### Table: `session`
 
@@ -35,6 +50,56 @@ The hypervisor runs a PostgreSQL database for session management that can be acc
 ### Triggers
 
 - `update_session_updated_at`: Automatically updates `updated_at` timestamp on row modification
+
+### SQL Initialization Script
+
+To create the example schema, connect to the database and run:
+
+```sql
+-- Create enum type for inbox-status
+CREATE TYPE inbox_status_enum AS ENUM ('pending', 'processing', 'completed', 'failed');
+
+-- Create session table
+CREATE TABLE session (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  messages JSONB,
+  inbox_status inbox_status_enum,
+  sbx_config JSONB,
+  parent UUID REFERENCES session(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_session_parent ON session(parent);
+CREATE INDEX idx_session_inbox_status ON session(inbox_status);
+
+-- Create updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to automatically update updated_at
+CREATE TRIGGER update_session_updated_at
+  BEFORE UPDATE ON session
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+```
+
+**To apply this schema**:
+
+```bash
+# From hypervisor
+sudo -u postgres psql -d sessiondb < schema.sql
+
+# Or interactively from a VM
+psql -h 10.1.0.1 -U sessionuser -d sessiondb
+# Then paste the SQL script
+```
 
 ## Connection Examples
 
@@ -436,21 +501,6 @@ WHERE state = 'active' AND now() - pg_stat_activity.query_start > interval '5 se
    ```bash
    sudo journalctl -u postgresql -f
    ```
-
-### Schema not initialized
-
-If the schema isn't created automatically, check the init service:
-
-```bash
-# Check service status
-sudo systemctl status init-session-schema
-
-# View logs
-sudo journalctl -u init-session-schema
-
-# Manually run initialization
-sudo systemctl start init-session-schema
-```
 
 ### Password authentication fails
 
