@@ -83,10 +83,4 @@
     # Let Home Manager install and manage itself.
     programs.home-manager.enable = true;
   };
-
-  # Make zsh the default shell for the user
-  users.users.robertwendt.shell = pkgs.bash;
-
-  # Enable bash system-wide so it can be used as a login shell
-  programs.bash.enable = true;
 }
