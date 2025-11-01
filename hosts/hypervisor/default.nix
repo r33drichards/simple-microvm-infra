@@ -13,6 +13,9 @@
 
     # GitOps deployment automation
     ./comin.nix
+
+    # VM auto-restart module (manual control)
+    ../../modules/microvm-auto-restart.nix
   ];
 
   # Nix settings
