@@ -28,7 +28,7 @@
     };
 
     # Run home-manager's activation script directly
-    script = ''
+    script = lib.mkForce ''
       ${config.home-manager.users.robertwendt.home.activationPackage}/activate
     '';
 
