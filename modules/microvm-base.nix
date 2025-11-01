@@ -78,6 +78,14 @@ in
     # Mark /persist as needed for boot (required by impermanence module)
     fileSystems."/persist".neededForBoot = true;
 
+    # Create required directories in /persist during stage 1 boot
+    # This runs after /persist is mounted but before bind mounts happen
+    # Required for fresh volumes (e.g., after reset-storage)
+    boot.initrd.postMountCommands = ''
+      mkdir -p /mnt-root/persist/nix-state
+      mkdir -p /mnt-root/persist/nix-overlay
+    '';
+
     # Manual bind mount for Nix database (impermanence doesn't support custom mount points)
     fileSystems."/nix/var" = {
       depends = [ "/persist" ];
