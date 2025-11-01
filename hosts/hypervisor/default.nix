@@ -16,6 +16,9 @@
 
     # VM auto-restart module (manual control)
     ../../modules/microvm-auto-restart.nix
+
+    # Redis services
+    ./redis.nix
   ];
 
   # Nix settings
