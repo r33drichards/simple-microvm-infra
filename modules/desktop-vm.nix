@@ -117,21 +117,39 @@ EOF
       chmod +x /home/robertwendt/apiKeyHelper
       chown robertwendt:users /home/robertwendt/apiKeyHelper
 
-      # Create .claude directory and settings.json
+      # Create .claude directory and settings.json (for apiKeyHelper only)
       mkdir -p /home/robertwendt/.claude
       cat > /home/robertwendt/.claude/settings.json <<EOF
 {
- "apiKeyHelper": "/home/robertwendt/apiKeyHelper",
- "mcpServers": {
-   "playwright": {
-     "command": "${playwright-mcp}/bin/mcp-server-playwright"
-   }
- }
+ "apiKeyHelper": "/home/robertwendt/apiKeyHelper"
 }
 EOF
       chown -R robertwendt:users /home/robertwendt/.claude
       chmod 755 /home/robertwendt/.claude
       chmod 644 /home/robertwendt/.claude/settings.json
+
+      # Create .claude.json with MCP server configuration only if it doesn't exist
+      # This is where Claude Code actually reads MCP server configs from
+      # Don't overwrite if it exists, as Claude Code stores other state there
+      if [ ! -f /home/robertwendt/.claude.json ]; then
+        cat > /home/robertwendt/.claude.json <<EOF
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "${playwright-mcp}/bin/mcp-server-playwright",
+      "args": [],
+      "env": {}
+    }
+  }
+}
+EOF
+        chown robertwendt:users /home/robertwendt/.claude.json
+        chmod 644 /home/robertwendt/.claude.json
+        echo "Created .claude.json with MCP server configuration"
+      else
+        echo ".claude.json already exists, skipping to preserve existing configuration"
+      fi
 
       echo "Claude Code configuration created successfully"
     '';
