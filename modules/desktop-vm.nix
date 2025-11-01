@@ -1,7 +1,7 @@
 # modules/desktop-vm.nix
 # Remote desktop VM configuration with XFCE, XRDP, and Claude Code
 # This module provides a full desktop environment accessible via RDP
-{ pkgs, ... }:
+{ pkgs, playwright-mcp, ... }:
 {
   # Enable X11 with XFCE desktop environment
   services.xserver = {
@@ -31,6 +31,7 @@
   # Install desktop utilities and Claude Code dependencies
   environment.systemPackages = with pkgs; [
     firefox
+    chromium
     xfce.thunar
     xfce.xfce4-terminal
     # Claude Code dependencies
@@ -39,6 +40,10 @@
     nodejs
     git
     gh  # GitHub CLI
+    # Playwright browsers for MCP server
+    playwright-driver.browsers
+    # MCP servers
+    playwright-mcp
   ];
 
   # Add ccode alias for easy Claude Code access
@@ -114,9 +119,14 @@ EOF
 
       # Create .claude directory and settings.json
       mkdir -p /home/robertwendt/.claude
-      cat > /home/robertwendt/.claude/settings.json <<'EOF'
+      cat > /home/robertwendt/.claude/settings.json <<EOF
 {
- "apiKeyHelper": "/home/robertwendt/apiKeyHelper"
+ "apiKeyHelper": "/home/robertwendt/apiKeyHelper",
+ "mcpServers": {
+   "playwright": {
+     "command": "${playwright-mcp}/bin/mcp-server-playwright"
+   }
+ }
 }
 EOF
       chown -R robertwendt:users /home/robertwendt/.claude
