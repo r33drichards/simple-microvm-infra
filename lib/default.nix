@@ -1,7 +1,7 @@
 # lib/default.nix
 # Helper function for building MicroVM configurations
 # Automatically includes microvm.nix and microvm-base.nix modules
-{ self, nixpkgs, microvm, impermanence, playwright-mcp }:
+{ self, nixpkgs, microvm, impermanence, playwright-mcp, multi-mcp }:
 
 { modules }:
 
@@ -10,6 +10,7 @@ nixpkgs.lib.nixosSystem {
 
   specialArgs = {
     inherit playwright-mcp;
+    multi-mcp-pkg = multi-mcp.packages."aarch64-linux".default;
   };
 
   modules = [

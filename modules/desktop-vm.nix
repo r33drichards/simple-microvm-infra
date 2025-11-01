@@ -1,7 +1,7 @@
 # modules/desktop-vm.nix
 # Remote desktop VM configuration with XFCE, XRDP, and Claude Code
 # This module provides a full desktop environment accessible via RDP
-{ pkgs, playwright-mcp, ... }:
+{ pkgs, playwright-mcp, multi-mcp-pkg, ... }:
 {
   # Enable X11 with XFCE desktop environment
   services.xserver = {
@@ -85,6 +85,11 @@
     playwright-driver.browsers
     # MCP servers
     playwright-mcp
+    # Multi-MCP proxy
+    multi-mcp-pkg
+    # Python and uv for MCP servers
+    python3
+    uv
   ];
 
   # Add ccode alias for easy Claude Code access
@@ -169,25 +174,63 @@ EOF
       chmod 755 /home/robertwendt/.claude
       chmod 644 /home/robertwendt/.claude/settings.json
 
-      # Create .claude.json with MCP server configuration only if it doesn't exist
+      # Create mcp.json configuration for multi-mcp
+      cat > /home/robertwendt/mcp.json <<EOF
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "${playwright-mcp}/bin/mcp-server-playwright",
+      "args": ["--executable-path", "${pkgs.chromium}/bin/chromium"],
+      "env": {}
+    },
+    "cli-exec": {
+      "command": "${pkgs.nodejs}/bin/npx",
+      "args": ["-y", "mcp-cli-exec"],
+      "env": {}
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "env": {}
+    },
+    "filesystem": {
+      "command": "${pkgs.nodejs}/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/robertwendt", "/mnt/storage"],
+      "env": {}
+    },
+    "chrome-devtools": {
+      "command": "${pkgs.nodejs}/bin/npx",
+      "args": ["-y", "chrome-devtools-mcp@latest", "--headless"],
+      "env": {}
+    }
+  }
+}
+EOF
+      chown robertwendt:users /home/robertwendt/mcp.json
+      chmod 644 /home/robertwendt/mcp.json
+      echo "Created mcp.json for multi-mcp"
+
+      # Create .claude.json with multi-mcp configuration only if it doesn't exist
       # This is where Claude Code actually reads MCP server configs from
       # Don't overwrite if it exists, as Claude Code stores other state there
       if [ ! -f /home/robertwendt/.claude.json ]; then
         cat > /home/robertwendt/.claude.json <<EOF
 {
   "mcpServers": {
-    "playwright": {
+    "multi-mcp": {
       "type": "stdio",
-      "command": "${playwright-mcp}/bin/mcp-server-playwright",
-      "args": ["--executable-path", "${pkgs.chromium}/bin/chromium"],
-      "env": {}
+      "command": "${multi-mcp-pkg}/bin/multi-mcp",
+      "args": ["--transport", "stdio", "--config", "/home/robertwendt/mcp.json"],
+      "env": {
+        "PATH": "${pkgs.lib.makeBinPath [ pkgs.nodejs pkgs.python3 pkgs.uv ]}"
+      }
     }
   }
 }
 EOF
         chown robertwendt:users /home/robertwendt/.claude.json
         chmod 644 /home/robertwendt/.claude.json
-        echo "Created .claude.json with MCP server configuration"
+        echo "Created .claude.json with multi-mcp configuration"
       else
         echo ".claude.json already exists, skipping to preserve existing configuration"
       fi

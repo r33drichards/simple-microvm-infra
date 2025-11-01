@@ -23,9 +23,15 @@
     impermanence = {
       url = "github:nix-community/impermanence";
     };
+
+    # Multi-MCP proxy server
+    multi-mcp = {
+      url = "github:r33drichards/multi-mcp";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm, comin, impermanence }:
+  outputs = { self, nixpkgs, microvm, comin, impermanence, multi-mcp }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -121,6 +127,7 @@
       # Custom packages
       packages.${system} = {
         inherit playwright-mcp;
+        multi-mcp-pkg = multi-mcp.packages.${system}.default;
       };
 
       # All system configurations
@@ -138,6 +145,8 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm impermanence playwright-mcp; };
+      lib.microvmSystem = import ./lib {
+        inherit self nixpkgs microvm impermanence playwright-mcp multi-mcp;
+      };
     };
 }
