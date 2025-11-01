@@ -81,12 +81,45 @@
     '';
   };
 
+  # Systemd service to ensure home-manager activation runs
+  # This creates zsh dotfiles and other home-manager managed files
+  systemd.services.home-manager-activation = {
+    description = "Home Manager activation for robertwendt";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "local-fs.target" ];  # Run after all local filesystems are mounted
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "robertwendt";
+    };
+    script = ''
+      set -e
+      # Create minimal .zshrc to prevent zsh-newuser-install prompt
+      # This will be overwritten by home-manager if it runs successfully
+      if [ ! -f /home/robertwendt/.zshrc ]; then
+        cat > /home/robertwendt/.zshrc <<'EOF'
+# Minimal zsh configuration
+# This prevents the zsh-newuser-install prompt
+HISTFILE=~/.zsh_history
+HISTSIZE=1000
+SAVEHIST=1000
+setopt appendhistory
+
+# Enable basic completion
+autoload -Uz compinit
+compinit
+EOF
+        echo "Created minimal .zshrc to prevent newuser-install prompt"
+      fi
+    '';
+  };
+
   # Systemd service to set up Claude Code configuration files
   # This must run AFTER /home is mounted (unlike activation scripts)
   systemd.services.setup-claude-code = {
     description = "Setup Claude Code configuration files";
     wantedBy = [ "multi-user.target" ];
-    after = [ "local-fs.target" ];  # Run after all local filesystems are mounted
+    after = [ "local-fs.target" "home-manager-activation.service" ];  # Run after all local filesystems are mounted and home-manager
     before = [ "fetch-claude-secrets.service" ];  # Run before secrets are fetched
     serviceConfig = {
       Type = "oneshot";
