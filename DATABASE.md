@@ -255,22 +255,135 @@ AND created_at < NOW() - INTERVAL '30 days';
 
 ## Backup and Restore
 
-### Backup
+### Automated Backups
+
+The database is automatically backed up daily using the NixOS PostgreSQL backup service:
+
+- **Schedule**: Daily at 2:00 AM
+- **Location**: `/var/backup/postgresql/`
+- **Database**: `sessiondb`
+- **Compression**: zstd (level 9) for optimal compression
+- **Format**: SQL dump with CREATE DATABASE commands
+
+**Check backup status**:
+```bash
+# View backup service status
+sudo systemctl status postgresqlBackup-sessiondb.service
+
+# View backup timer status
+sudo systemctl status postgresqlBackup-sessiondb.timer
+
+# List recent backup logs
+sudo journalctl -u postgresqlBackup-sessiondb.service -n 50
+
+# View backup files
+sudo ls -lh /var/backup/postgresql/
+```
+
+**Manually trigger a backup**:
+```bash
+# Run backup immediately
+sudo systemctl start postgresqlBackup-sessiondb.service
+
+# Check result
+sudo journalctl -u postgresqlBackup-sessiondb.service -f
+```
+
+### Backup Files
+
+Backup files are named: `sessiondb.sql.zst`
+
+The backup service creates a single file that is overwritten on each run. For retention of multiple backups, consider:
+
+1. **Copy backups before they're overwritten**:
+```bash
+# Daily cron job to archive backups
+sudo cp /var/backup/postgresql/sessiondb.sql.zst \
+  /var/backup/postgresql/archive/sessiondb_$(date +%Y%m%d).sql.zst
+```
+
+2. **Upload to S3** (recommended for production):
+```bash
+# Add to systemd timer or cron
+sudo aws s3 cp /var/backup/postgresql/sessiondb.sql.zst \
+  s3://my-backups/postgresql/sessiondb_$(date +%Y%m%d).sql.zst
+```
+
+### Manual Backup
+
+If you need an immediate backup outside the automated schedule:
 
 ```bash
-# On hypervisor
+# Manual backup (uncompressed)
 sudo -u postgres pg_dump sessiondb > sessiondb_backup_$(date +%Y%m%d).sql
 
-# Backup to S3
-sudo -u postgres pg_dump sessiondb | gzip | aws s3 cp - s3://my-backups/sessiondb_$(date +%Y%m%d).sql.gz
+# Manual backup with gzip compression
+sudo -u postgres pg_dump sessiondb | gzip > sessiondb_backup_$(date +%Y%m%d).sql.gz
+
+# Manual backup with zstd compression (better compression)
+sudo -u postgres pg_dump sessiondb | zstd -9 > sessiondb_backup_$(date +%Y%m%d).sql.zst
 ```
 
 ### Restore
 
+**From automated backup**:
 ```bash
-# On hypervisor
-sudo -u postgres psql sessiondb < sessiondb_backup_20231101.sql
+# Decompress and restore
+sudo zstd -d /var/backup/postgresql/sessiondb.sql.zst -c | sudo -u postgres psql sessiondb
 ```
+
+**From manual backup**:
+```bash
+# Restore from uncompressed SQL
+sudo -u postgres psql sessiondb < sessiondb_backup_20231101.sql
+
+# Restore from gzip
+zcat sessiondb_backup_20231101.sql.gz | sudo -u postgres psql sessiondb
+
+# Restore from zstd
+zstdcat sessiondb_backup_20231101.sql.zst | sudo -u postgres psql sessiondb
+```
+
+**Full restore (drop and recreate database)**:
+```bash
+# Drop existing database (WARNING: destroys all data!)
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS sessiondb;"
+sudo -u postgres psql -c "CREATE DATABASE sessiondb;"
+
+# Restore from backup
+sudo zstd -d /var/backup/postgresql/sessiondb.sql.zst -c | sudo -u postgres psql sessiondb
+
+# Verify restoration
+sudo -u postgres psql -d sessiondb -c "SELECT COUNT(*) FROM session;"
+```
+
+### Backup Retention Strategy
+
+For production use, implement a retention policy:
+
+**Example: Keep daily backups for 7 days, weekly for 4 weeks**:
+```bash
+#!/bin/bash
+# /usr/local/bin/backup-retention.sh
+
+BACKUP_DIR="/var/backup/postgresql/archive"
+S3_BUCKET="s3://my-backups/postgresql"
+
+# Archive current backup
+DATE=$(date +%Y%m%d)
+cp /var/backup/postgresql/sessiondb.sql.zst "$BACKUP_DIR/sessiondb_$DATE.sql.zst"
+
+# Upload to S3
+aws s3 cp "$BACKUP_DIR/sessiondb_$DATE.sql.zst" "$S3_BUCKET/"
+
+# Delete local backups older than 7 days
+find "$BACKUP_DIR" -name "sessiondb_*.sql.zst" -mtime +7 -delete
+
+# Delete S3 backups older than 30 days (requires AWS CLI)
+# Add lifecycle policy in S3 console or use aws s3api
+```
+
+Add to systemd timer or cron for automatic execution.
 
 ## Monitoring
 
@@ -346,4 +459,45 @@ Verify the password is set correctly:
 ```bash
 # On hypervisor as postgres user
 sudo -u postgres psql -c "ALTER USER sessionuser WITH PASSWORD 'sessionpass123';"
+```
+
+### Backups not running
+
+If automated backups aren't working:
+
+```bash
+# Check if backup timer is active
+sudo systemctl status postgresqlBackup-sessiondb.timer
+
+# Check if backup timer is enabled
+sudo systemctl list-timers | grep postgresql
+
+# View backup service logs
+sudo journalctl -u postgresqlBackup-sessiondb.service
+
+# Manually trigger backup to test
+sudo systemctl start postgresqlBackup-sessiondb.service
+
+# Check backup directory exists and has proper permissions
+sudo ls -ld /var/backup/postgresql/
+# Should show: drwxr-xr-x postgres postgres
+```
+
+### Restore fails
+
+If restore fails:
+
+```bash
+# Check if database exists
+sudo -u postgres psql -l | grep sessiondb
+
+# Check if user has permissions
+sudo -u postgres psql -d sessiondb -c "\du sessionuser"
+
+# Try restoring with verbose error output
+sudo zstd -d /var/backup/postgresql/sessiondb.sql.zst -c | sudo -u postgres psql -d sessiondb -v ON_ERROR_STOP=1
+
+# If schema conflicts, drop and recreate database first
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS sessiondb;"
+sudo -u postgres psql -c "CREATE DATABASE sessiondb OWNER sessionuser;"
 ```

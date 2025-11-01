@@ -56,6 +56,33 @@
   # Open PostgreSQL port in firewall for VM networks
   networking.firewall.allowedTCPPorts = [ 5432 ];
 
+  # PostgreSQL automated backups
+  services.postgresqlBackup = {
+    enable = true;
+
+    # Backup location
+    location = "/var/backup/postgresql";
+
+    # Backup only the sessiondb database
+    databases = [ "sessiondb" ];
+
+    # Run daily at 2:00 AM
+    startAt = "*-*-* 02:00:00";
+
+    # Use zstd compression for better compression ratios
+    compression = "zstd";
+    compressionLevel = 9;
+
+    # pg_dump options: -C = include CREATE DATABASE commands
+    pgdumpOptions = "-C";
+  };
+
+  # Create backup directory with proper permissions
+  systemd.tmpfiles.rules = [
+    "d /var/backup 0755 root root -"
+    "d /var/backup/postgresql 0755 postgres postgres -"
+  ];
+
   # Initialize database schema
   # This runs after PostgreSQL starts and ensures the schema is created
   systemd.services.init-session-schema = {
