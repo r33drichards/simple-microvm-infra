@@ -87,12 +87,13 @@ in
     '';
 
     # Manual bind mount for Nix database (impermanence doesn't support custom mount points)
+    # Note: neededForBoot removed - stage 2 will create directory and mount
     fileSystems."/nix/var" = {
       depends = [ "/persist" ];
       device = "/persist/nix-state";
       fsType = "none";
       options = [ "bind" ];
-      neededForBoot = true;
+      neededForBoot = false;
     };
 
     # TAP network interface
