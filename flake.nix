@@ -74,9 +74,24 @@
             ./modules/desktop-vm.nix
           ];
         };
-        vm3 = { };
-        vm4 = { };
-        vm5 = { };
+        vm3 = {
+          # Remote desktop VM with browser access (XRDP + XFCE)
+          modules = [
+            ./modules/desktop-vm.nix
+          ];
+        };
+        vm4 = {
+          # Remote desktop VM with browser access (XRDP + XFCE)
+          modules = [
+            ./modules/desktop-vm.nix
+          ];
+        };
+        vm5 = {
+          # Remote desktop VM with browser access (XRDP + XFCE)
+          modules = [
+            ./modules/desktop-vm.nix
+          ];
+        };
       };
 
       # Generate nixosConfiguration for each VM
