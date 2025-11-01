@@ -1,6 +1,10 @@
 # modules/desktop-vm.nix
 # Remote desktop VM configuration with XFCE, XRDP, and Claude Code
 # This module provides a full desktop environment accessible via RDP
+#
+# Note: Anthropic API key authentication is handled by the optional claude-code-auth module.
+# To enable authentication via AWS Secrets Manager, import modules/claude-code-auth.nix
+# and set: services.claudeCode.auth.enable = true;
 { pkgs, playwright-mcp, ... }:
 {
   # Enable X11 with XFCE desktop environment
@@ -92,43 +96,12 @@
     ccode = "npx -y @anthropic-ai/claude-code --dangerously-skip-permissions";
   };
 
-  # Systemd service to fetch secrets from AWS Secrets Manager on boot
-  systemd.services.fetch-claude-secrets = {
-    description = "Fetch Claude Code API key from AWS Secrets Manager";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "robertwendt";
-      Group = "users";
-    };
-    script = ''
-      set -e
-
-      # Fetch secrets from AWS Secrets Manager
-      ${pkgs.awscli2}/bin/aws secretsmanager get-secret-value \
-        --secret-id bmnixos \
-        --region us-west-2 \
-        --query SecretString \
-        --output text | ${pkgs.jq}/bin/jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > /home/robertwendt/.env
-
-      # Set correct permissions
-      chmod 600 /home/robertwendt/.env
-      chown robertwendt:users /home/robertwendt/.env
-
-      echo "Claude Code secrets fetched successfully"
-    '';
-  };
-
-  # Systemd service to set up Claude Code configuration files
-  # This must run AFTER /home is mounted
+  # Systemd service to set up Claude Code MCP server configuration
+  # Note: Authentication is now handled by the optional claude-code-auth module
   systemd.services.setup-claude-code = {
-    description = "Setup Claude Code configuration files";
+    description = "Setup Claude Code MCP server configuration";
     wantedBy = [ "multi-user.target" ];
     after = [ "local-fs.target" ];  # Run after filesystem
-    before = [ "fetch-claude-secrets.service" ];  # Run before secrets are fetched
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -136,38 +109,8 @@
     script = ''
       set -e
 
-      # Create apiKeyHelper script
+      # Ensure home directory exists
       mkdir -p /home/robertwendt
-      cat > /home/robertwendt/apiKeyHelper <<'EOF'
-#!/bin/sh
-
-# Read the ANTHROPIC_API_KEY from .env file
-if [ -f "$HOME/.env" ]; then
-    # Extract the API key value from the .env file
-    key=$(grep '^ANTHROPIC_API_KEY=' "$HOME/.env" | cut -d '=' -f 2-)
-    if [ -n "$key" ]; then
-        echo "$key"
-        exit 0
-    fi
-fi
-
-# If we couldn't find the key, exit with error
-echo "Error: ANTHROPIC_API_KEY not found in $HOME/.env" >&2
-exit 1
-EOF
-      chmod +x /home/robertwendt/apiKeyHelper
-      chown robertwendt:users /home/robertwendt/apiKeyHelper
-
-      # Create .claude directory and settings.json (for apiKeyHelper only)
-      mkdir -p /home/robertwendt/.claude
-      cat > /home/robertwendt/.claude/settings.json <<EOF
-{
- "apiKeyHelper": "/home/robertwendt/apiKeyHelper"
-}
-EOF
-      chown -R robertwendt:users /home/robertwendt/.claude
-      chmod 755 /home/robertwendt/.claude
-      chmod 644 /home/robertwendt/.claude/settings.json
 
       # Create .claude.json with MCP server configuration only if it doesn't exist
       # This is where Claude Code actually reads MCP server configs from
@@ -192,7 +135,7 @@ EOF
         echo ".claude.json already exists, skipping to preserve existing configuration"
       fi
 
-      echo "Claude Code configuration created successfully"
+      echo "Claude Code MCP server configuration created successfully"
     '';
   };
 
