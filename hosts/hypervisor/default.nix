@@ -65,6 +65,49 @@
     nodejs
     jq
     awscli2  # For fetching secrets from AWS Secrets Manager
+
+    # Custom script to reset all VM storage volumes
+    (pkgs.writeShellScriptBin "reset-storage" ''
+      set -euo pipefail
+
+      echo "=== Resetting all VM storage volumes ==="
+      echo ""
+
+      # Stop all VMs
+      echo "Stopping all VMs..."
+      for vm in vm1 vm2 vm3 vm4 vm5; do
+        echo "  - Stopping $vm..."
+        systemctl stop microvm@$vm
+      done
+      echo "All VMs stopped."
+      echo ""
+
+      # Delete all persistent volumes
+      echo "Deleting persistent volumes..."
+      for vm in vm1 vm2 vm3 vm4 vm5; do
+        volume="/var/lib/microvms/$vm/data.img"
+        if [ -f "$volume" ]; then
+          echo "  - Deleting $volume..."
+          rm "$volume"
+        else
+          echo "  - $volume does not exist (skipping)"
+        fi
+      done
+      echo "All volumes deleted."
+      echo ""
+
+      # Start all VMs (they will recreate volumes on first boot)
+      echo "Starting all VMs..."
+      for vm in vm1 vm2 vm3 vm4 vm5; do
+        echo "  - Starting $vm..."
+        systemctl start microvm@$vm
+      done
+      echo "All VMs started."
+      echo ""
+
+      echo "=== Storage reset complete ==="
+      echo "New volumes will be created automatically on VM boot."
+    '')
   ];
 
   # SSH with key-only auth
