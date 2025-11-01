@@ -59,18 +59,12 @@
       # Add any additional user-specific packages here
     ];
 
-    # Zsh with oh-my-zsh configuration
-    programs.zsh = {
+    programs.bash = {
       enable = true;
-      enableCompletion = false; # enabled in oh-my-zsh
+      enableCompletion = true;
       initExtra = ''
         export NIXPKGS_ALLOW_UNFREE=1
       '';
-      oh-my-zsh = {
-        enable = true;
-        plugins = [ "git" ];
-        theme = "robbyrussell";
-      };
     };
 
     # Enable atuin for better shell history management
@@ -91,8 +85,8 @@
   };
 
   # Make zsh the default shell for the user
-  users.users.robertwendt.shell = pkgs.zsh;
+  users.users.robertwendt.shell = pkgs.bash;
 
-  # Enable zsh system-wide so it can be used as a login shell
-  programs.zsh.enable = true;
+  # Enable bash system-wide so it can be used as a login shell
+  programs.bash.enable = true;
 }

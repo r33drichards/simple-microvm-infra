@@ -140,7 +140,6 @@ EOF
   # Ensure robertwendt user can login via RDP
   users.users.robertwendt = {
     # configure shell to zsh
-    shell = pkgs.zsh;
     isNormalUser = true;  # Required to create home directory
     extraGroups = [ "wheel" ];  # Preserve from base config
     # Set initial password for RDP login (change after first login)
