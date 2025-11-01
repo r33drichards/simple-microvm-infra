@@ -12,6 +12,34 @@
     };
   };
 
+  # Disable screen locking and screensaver
+  services.xserver.displayManager.lightdm.greeters.gtk.indicators = [ "~host" "~spacer" "~clock" "~spacer" "~session" "~power" ];
+
+  # Disable screensaver
+  programs.xfconf.enable = true;
+  programs.xfconf.settings = {
+    # Disable screen lock in power manager
+    xfce4-power-manager = {
+      "xfce4-power-manager/blank-on-ac" = 0;
+      "xfce4-power-manager/blank-on-battery" = 0;
+      "xfce4-power-manager/dpms-enabled" = false;
+      "xfce4-power-manager/dpms-on-ac-off" = 0;
+      "xfce4-power-manager/dpms-on-ac-sleep" = 0;
+      "xfce4-power-manager/dpms-on-battery-off" = 0;
+      "xfce4-power-manager/dpms-on-battery-sleep" = 0;
+      "xfce4-power-manager/lock-screen-suspend-hibernate" = false;
+    };
+    # Disable screensaver
+    xfce4-screensaver = {
+      "xfce4-screensaver/enabled" = false;
+      "xfce4-screensaver/lock-enabled" = false;
+    };
+    # Disable session power management locking
+    xfce4-session = {
+      "xfce4-session/shutdown/LockScreen" = false;
+    };
+  };
+
   # Set default session to XFCE
   services.displayManager.defaultSession = "xfce";
 
