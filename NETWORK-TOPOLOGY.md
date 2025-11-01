@@ -15,87 +15,106 @@ This document provides detailed diagrams and explanations of the network archite
 ## Physical/Virtual Topology
 
 ```mermaid
-graph TB
-    subgraph Internet["Internet"]
-        AWS["AWS Network"]
-        IMDS["AWS IMDS<br/>169.254.169.254"]
-        External["External Hosts"]
-    end
-
-    subgraph Hypervisor["a1.metal Hypervisor (ARM64)"]
-        subgraph Interfaces["Network Interfaces"]
-            enP2p4s0["enP2p4s0<br/>Public IP: 35.92.20.130<br/>(AWS Physical Interface)"]
-            tailscale0["tailscale0<br/>100.x.x.x<br/>(VPN Interface)"]
-            lo["lo<br/>127.0.0.1<br/>(Loopback)"]
-        end
-
-        subgraph Bridges["Bridge Interfaces (Virtual Switches)"]
-            br1["br-vm1<br/>10.1.0.1/24"]
-            br2["br-vm2<br/>10.2.0.1/24"]
-            br3["br-vm3<br/>10.3.0.1/24"]
-            br4["br-vm4<br/>10.4.0.1/24"]
-            br5["br-vm5<br/>10.5.0.1/24"]
-        end
-
-        subgraph TAP["TAP Interfaces"]
-            tap1["vm-vm1<br/>(attached to br-vm1)"]
-            tap2["vm-vm2<br/>(attached to br-vm2)"]
-            tap3["vm-vm3<br/>(attached to br-vm3)"]
-            tap4["vm-vm4<br/>(attached to br-vm4)"]
-            tap5["vm-vm5<br/>(attached to br-vm5)"]
-        end
-
-        nftables["nftables<br/>• NAT (IMDS, Internet)<br/>• Firewall (Isolation)<br/>• Forwarding Rules"]
-    end
-
-    subgraph VMs["Virtual Machines (QEMU)"]
-        VM1["VM1<br/>10.1.0.2/24<br/>Gateway: 10.1.0.1<br/>(NixOS)"]
-        VM2["VM2<br/>10.2.0.2/24<br/>Gateway: 10.2.0.1<br/>(NixOS)"]
-        VM3["VM3<br/>10.3.0.2/24<br/>Gateway: 10.3.0.1<br/>(NixOS)"]
-        VM4["VM4<br/>10.4.0.2/24<br/>Gateway: 10.4.0.1<br/>(NixOS)"]
-        VM5["VM5<br/>10.5.0.2/24<br/>Gateway: 10.5.0.1<br/>(NixOS)"]
-    end
-
-    subgraph Remote["Remote Access (Tailscale VPN)"]
+graph LR
+    subgraph Remote["Remote Access"]
         Laptop["Your Laptop<br/>100.y.y.y<br/>(Tailscale Client)"]
     end
 
-    %% External connections
+    subgraph Internet["Internet"]
+        External["External Hosts"]
+        AWS["AWS Network"]
+        IMDS["AWS IMDS<br/>169.254.169.254"]
+    end
+
+    subgraph Hypervisor["a1.metal Hypervisor (ARM64)"]
+        subgraph NetLayer["Network Layer"]
+            tailscale0["tailscale0<br/>100.x.x.x<br/>(VPN)"]
+            enP2p4s0["enP2p4s0<br/>35.92.20.130<br/>(AWS Physical)"]
+        end
+
+        nftables["nftables<br/>• NAT (IMDS, Internet)<br/>• Firewall (Isolation)<br/>• Forwarding Rules"]
+
+        subgraph VMNetwork["VM Network Infrastructure"]
+            subgraph VM1Net["VM1 Network"]
+                br1["br-vm1<br/>10.1.0.1/24"]
+                tap1["vm-vm1<br/>(TAP)"]
+            end
+
+            subgraph VM2Net["VM2 Network"]
+                br2["br-vm2<br/>10.2.0.1/24"]
+                tap2["vm-vm2<br/>(TAP)"]
+            end
+
+            subgraph VM3Net["VM3 Network"]
+                br3["br-vm3<br/>10.3.0.1/24"]
+                tap3["vm-vm3<br/>(TAP)"]
+            end
+
+            subgraph VM4Net["VM4 Network"]
+                br4["br-vm4<br/>10.4.0.1/24"]
+                tap4["vm-vm4<br/>(TAP)"]
+            end
+
+            subgraph VM5Net["VM5 Network"]
+                br5["br-vm5<br/>10.5.0.1/24"]
+                tap5["vm-vm5<br/>(TAP)"]
+            end
+        end
+    end
+
+    subgraph VMs["Virtual Machines"]
+        VM1["VM1<br/>10.1.0.2/24<br/>(NixOS)"]
+        VM2["VM2<br/>10.2.0.2/24<br/>(NixOS)"]
+        VM3["VM3<br/>10.3.0.2/24<br/>(NixOS)"]
+        VM4["VM4<br/>10.4.0.2/24<br/>(NixOS)"]
+        VM5["VM5<br/>10.5.0.2/24<br/>(NixOS)"]
+    end
+
+    %% Remote to Internet
+    Laptop <-.VPN Tunnel.-> External
+
+    %% Internet to Hypervisor
+    External -.Tailscale.-> tailscale0
     AWS <--> enP2p4s0
     IMDS <--> enP2p4s0
-    External <-.Tailscale VPN.-> tailscale0
 
-    %% Bridge to TAP connections
+    %% Network interfaces to nftables
+    tailscale0 <--> nftables
+    enP2p4s0 <--> nftables
+
+    %% nftables to bridges (organized to avoid crossings)
+    nftables <--> br1
+    nftables <--> br2
+    nftables <--> br3
+    nftables <--> br4
+    nftables <--> br5
+
+    %% Bridges to TAPs (within each network)
     br1 --- tap1
     br2 --- tap2
     br3 --- tap3
     br4 --- tap4
     br5 --- tap5
 
-    %% TAP to VM connections (virtio-net)
+    %% TAPs to VMs (virtio-net)
     tap1 -.virtio-net.-> VM1
     tap2 -.virtio-net.-> VM2
     tap3 -.virtio-net.-> VM3
     tap4 -.virtio-net.-> VM4
     tap5 -.virtio-net.-> VM5
 
-    %% Traffic routing through nftables
-    enP2p4s0 <--> nftables
-    tailscale0 <--> nftables
-    br1 <--> nftables
-    br2 <--> nftables
-    br3 <--> nftables
-    br4 <--> nftables
-    br5 <--> nftables
-
-    %% Remote access
-    Laptop <-.VPN Tunnel.-> External
-
+    style Remote fill:#f3e5f5
     style Internet fill:#e1f5ff
     style Hypervisor fill:#fff4e1
-    style VMs fill:#e8f5e9
-    style Remote fill:#f3e5f5
+    style NetLayer fill:#fff9e6
     style nftables fill:#ffebee
+    style VMNetwork fill:#f5f5f5
+    style VM1Net fill:#e3f2fd
+    style VM2Net fill:#e8f5e9
+    style VM3Net fill:#fff3e0
+    style VM4Net fill:#fce4ec
+    style VM5Net fill:#f1f8e9
+    style VMs fill:#e8f5e9
 ```
 
 ---
