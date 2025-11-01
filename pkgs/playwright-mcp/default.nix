@@ -2,7 +2,7 @@
 
 pkgs.buildNpmPackage rec {
   pname = "mcp-server-playwright";
-  version = "0.0.35";
+  version = "0.0.45";
 
   buildInputs = [ pkgs.nodejs ];
 
@@ -12,19 +12,21 @@ pkgs.buildNpmPackage rec {
     owner = "microsoft";
     repo = "playwright-mcp";
     rev = "v${version}";
-    hash = "sha256-bF/F4dP2ri09AlQLItQwQxDAQybY2fXft4ccxSKijt8=";
+    hash = "sha256-mNFhaW/nU4WQtgwiAfM9srWlMFMH7ZSxTPAs1xxH+ac=";
   };
 
-  npmDepsHash = "sha256-xSQCs6rJlUrdS8c580mo1/VjpcDxwHor0pdstB9VQEo=";
+  npmDepsHash = "sha256-zga3jjb72rZVAZsKrAOBS4eR+3WrT+lg9wwy4D4+kDk=";
 
-  # Set Playwright to use system chromium instead of downloading browsers
+  # No build script in package.json
+  dontNpmBuild = true;
+
+  # Skip browser download during build - we'll use system chromium
   env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-  env.PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
 
-  # Wrap the executable to set environment variables at runtime
+  # Wrap the executable to use system chromium and writable cache directory
   postInstall = ''
     wrapProgram $out/bin/mcp-server-playwright \
-      --set PLAYWRIGHT_BROWSERS_PATH "0" \
+      --set PLAYWRIGHT_BROWSERS_PATH "\$HOME/.cache/ms-playwright" \
       --set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD "1" \
       --set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH "${pkgs.chromium}/bin/chromium"
   '';
