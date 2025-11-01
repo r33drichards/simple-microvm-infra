@@ -14,7 +14,10 @@ let
   vmResources = import ./vm-resources.nix { inherit lib; };
 in
 {
-  imports = [ vmResources ];
+  imports = [
+    vmResources
+    ./monitoring/vm-agent.nix
+  ];
 
   # Option: which network this VM belongs to
   options.microvm.network = lib.mkOption {

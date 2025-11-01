@@ -13,6 +13,12 @@
 
     # GitOps deployment automation
     ./comin.nix
+
+    # Tailscale VPN and Grafana serving
+    ./tailscale.nix
+
+    # Monitoring stack (Prometheus, Grafana, Loki, Vector)
+    ../../modules/monitoring
   ];
 
   # Nix settings
@@ -36,9 +42,6 @@
   nixpkgs.config.allowUnfree = true;
 
   networking.hostName = "hypervisor";
-
-  # Tailscale for remote access and subnet routing
-  services.tailscale.enable = true;
 
   # Environment configuration
   environment.variables = {
