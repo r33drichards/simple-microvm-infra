@@ -41,9 +41,6 @@
           modules = [
             ./modules/desktop-vm.nix
             {
-              # Disable writable store overlay for vm1 (debugging boot issue)
-              microvm.writableStoreOverlay = null;
-
               # Enable Docker
               virtualisation.docker.enable = true;
 
