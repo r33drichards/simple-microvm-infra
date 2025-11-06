@@ -29,7 +29,7 @@ graph LR
     subgraph Hypervisor["a1.metal Hypervisor (ARM64)"]
         subgraph NetLayer["Network Layer"]
             tailscale0["tailscale0<br/>100.x.x.x<br/>(VPN)"]
-            enP2p4s0["enP2p4s0<br/>35.92.20.130<br/>(AWS Physical)"]
+            enP2p4s0["enP2p4s0<br/>54.201.157.166<br/>(AWS Physical)"]
         end
 
         nftables["nftables<br/>• NAT (IMDS, Internet)<br/>• Firewall (Isolation)<br/>• Forwarding Rules"]

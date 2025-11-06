@@ -28,7 +28,7 @@ This infrastructure uses **Comin** for automated, pull-based GitOps deployments.
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ Hypervisor (35.92.20.130)                                    │
+│ Hypervisor (54.201.157.166)                                    │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ Comin Service (systemd)                              │  │
