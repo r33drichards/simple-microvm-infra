@@ -193,68 +193,88 @@
     "d /var/lib/microvms/vm5 0755 microvm kvm -"
   ];
 
+  # Helper script to wait for TAP interface and attach to bridge
+  environment.etc."microvm-bridge-attach.sh".source = pkgs.writeScript "microvm-bridge-attach" ''
+    #!${pkgs.bash}/bin/bash
+    TAP=$1
+    BRIDGE=$2
+
+    # Wait up to 30 seconds for the TAP interface to appear
+    for i in $(seq 1 30); do
+      if ${pkgs.iproute2}/bin/ip link show "$TAP" &>/dev/null; then
+        ${pkgs.iproute2}/bin/ip link set "$TAP" master "$BRIDGE"
+        exit 0
+      fi
+      sleep 1
+    done
+
+    echo "Timeout waiting for $TAP interface"
+    exit 1
+  '';
+
   # Systemd services to add TAP interfaces to bridges when VMs start
+  # These services wait for the microvm to start and the TAP interface to be created by QEMU
   systemd.services."microvm-bridge-vm1" = {
     description = "Add vm-vm1 TAP interface to br-vm1 bridge";
-    after = [ "microvm-tap-interfaces@vm1.service" ];
+    after = [ "microvm@vm1.service" ];
     bindsTo = [ "microvm@vm1.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm1 master br-vm1";
-      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm1 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm1 br-vm1";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm1 nomaster";
     };
     wantedBy = [ "microvm@vm1.service" ];
   };
 
   systemd.services."microvm-bridge-vm2" = {
     description = "Add vm-vm2 TAP interface to br-vm2 bridge";
-    after = [ "microvm-tap-interfaces@vm2.service" ];
+    after = [ "microvm@vm2.service" ];
     bindsTo = [ "microvm@vm2.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm2 master br-vm2";
-      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm2 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm2 br-vm2";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm2 nomaster";
     };
     wantedBy = [ "microvm@vm2.service" ];
   };
 
   systemd.services."microvm-bridge-vm3" = {
     description = "Add vm-vm3 TAP interface to br-vm3 bridge";
-    after = [ "microvm-tap-interfaces@vm3.service" ];
+    after = [ "microvm@vm3.service" ];
     bindsTo = [ "microvm@vm3.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm3 master br-vm3";
-      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm3 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm3 br-vm3";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm3 nomaster";
     };
     wantedBy = [ "microvm@vm3.service" ];
   };
 
   systemd.services."microvm-bridge-vm4" = {
     description = "Add vm-vm4 TAP interface to br-vm4 bridge";
-    after = [ "microvm-tap-interfaces@vm4.service" ];
+    after = [ "microvm@vm4.service" ];
     bindsTo = [ "microvm@vm4.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm4 master br-vm4";
-      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm4 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm4 br-vm4";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm4 nomaster";
     };
     wantedBy = [ "microvm@vm4.service" ];
   };
 
   systemd.services."microvm-bridge-vm5" = {
     description = "Add vm-vm5 TAP interface to br-vm5 bridge";
-    after = [ "microvm-tap-interfaces@vm5.service" ];
+    after = [ "microvm@vm5.service" ];
     bindsTo = [ "microvm@vm5.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip link set vm-vm5 master br-vm5";
-      ExecStop = "${pkgs.iproute2}/bin/ip link set vm-vm5 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm5 br-vm5";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm5 nomaster";
     };
     wantedBy = [ "microvm@vm5.service" ];
   };
