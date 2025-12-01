@@ -41,7 +41,6 @@
     ensureUsers = [
       {
         name = "sessionuser";
-        ensureDBOwnership = true;
       }
     ];
   };
@@ -88,13 +87,15 @@
         sleep 1
       done
 
-      # Set password (change this to a secure password!)
+      # Set password and grant ownership (change this to a secure password!)
       # In production, use a secrets manager instead
       ${pkgs.postgresql_15}/bin/psql -U postgres <<'EOF'
         ALTER USER sessionuser WITH PASSWORD 'sessionpass123';
+        ALTER DATABASE sessiondb OWNER TO sessionuser;
+        GRANT ALL PRIVILEGES ON DATABASE sessiondb TO sessionuser;
       EOF
 
-      echo "Password set for sessionuser"
+      echo "Password and ownership set for sessionuser"
     '';
   };
 }
