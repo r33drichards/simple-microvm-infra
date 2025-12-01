@@ -86,6 +86,42 @@ Tailscale provides VPN access from anywhere:
 - Routes must be approved in Tailscale admin console
 - Once approved, you can SSH directly to VMs from any device on your Tailnet
 
+### RDP Access via SSH Tunneling
+
+VMs run XRDP on port 3389 for graphical desktop access. To connect from your local machine, use SSH port forwarding:
+
+**Single VM Connection:**
+```bash
+# Connect to VM1
+ssh -i ~/Downloads/rw.pem -L 3391:10.1.0.2:3389 root@3.80.51.36
+```
+
+Then connect your RDP client to `localhost:3391`
+
+**Multiple VM Connections (all at once):**
+```bash
+ssh -i ~/Downloads/rw.pem \
+  -L 3391:10.1.0.2:3389 \
+  -L 3392:10.2.0.2:3389 \
+  -L 3393:10.3.0.2:3389 \
+  -L 3394:10.4.0.2:3389 \
+  -L 3395:10.5.0.2:3389 \
+  root@3.80.51.36
+```
+
+**Port Mapping:**
+- VM1 (10.1.0.2:3389) → `localhost:3391`
+- VM2 (10.2.0.2:3389) → `localhost:3392`
+- VM3 (10.3.0.2:3389) → `localhost:3393`
+- VM4 (10.4.0.2:3389) → `localhost:3394`
+- VM5 (10.5.0.2:3389) → `localhost:3395`
+
+**RDP Credentials (all VMs):**
+- Username: `robertwendt`
+- Password: `changeme`
+
+**Note:** Keep the SSH tunnel open while using RDP. The tunnel provides secure access through the public-facing hypervisor to the private VM networks.
+
 ## Storage Architecture
 
 ### Shared /nix/store
