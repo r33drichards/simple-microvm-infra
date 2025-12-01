@@ -19,9 +19,6 @@
 
     # Redis services
     ./redis.nix
-
-    # PostgreSQL database for session management
-    ./postgres.nix
   ];
 
   # Nix settings
