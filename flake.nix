@@ -61,9 +61,9 @@
           ];
         };
         vm5 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
+          # Incus container/VM host with Web UI
           modules = [
-            ./modules/desktop-vm.nix
+            ./modules/incus-vm.nix
           ];
         };
       };
