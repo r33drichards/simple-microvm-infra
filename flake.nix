@@ -55,9 +55,11 @@
           ];
         };
         vm4 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
+          # K3s (lightweight Kubernetes) server
           modules = [
-            ./modules/desktop-vm.nix
+            ./modules/k3s-vm.nix
+            # Increase resources for Kubernetes
+            { microvm.mem = 4096; microvm.vcpu = 2; }
           ];
         };
         vm5 = {
