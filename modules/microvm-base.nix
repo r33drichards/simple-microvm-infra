@@ -179,6 +179,9 @@ in
         "/var/lib/systemd"
         "/var/lib/nixos"
 
+        # Comin GitOps state (git checkout, build state)
+        "/var/lib/comin"
+
         # Docker (for VMs with Docker enabled)
         "/var/lib/docker"
       ];

@@ -101,6 +101,6 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm impermanence playwright-mcp; };
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm impermanence comin playwright-mcp; };
     };
 }
