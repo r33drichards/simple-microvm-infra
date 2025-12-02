@@ -16,46 +16,12 @@
     };
   };
 
-  # Disable screen locking and screensaver
-  services.xserver.displayManager.lightdm.greeters.gtk.indicators = [ "~host" "~spacer" "~clock" "~spacer" "~session" "~power" ];
-
-  # Disable screensaver and screen lock via xfconf settings
-  # Note: We use a systemd user service to apply these settings after login
+  # Note: LightDM greeter customization removed
+  # Enable xfconf for XFCE configuration
   programs.xfconf.enable = true;
 
-  # Systemd user service to configure XFCE settings on login
-  systemd.user.services.xfce-disable-screenlock = {
-    description = "Disable XFCE screen lock and screensaver";
-    wantedBy = [ "xfce4-session.target" ];
-    after = [ "xfce4-session.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      # Wait for xfconfd to be ready
-      sleep 2
-
-      # Disable screen lock in power manager
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -n -t int -s 0
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-battery -n -t int -s 0
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -n -t bool -s false
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-off -n -t int -s 0
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-sleep -n -t int -s 0
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-battery-off -n -t int -s 0
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-battery-sleep -n -t int -s 0
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/lock-screen-suspend-hibernate -n -t bool -s false
-
-      # Disable screensaver
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-screensaver -p /xfce4-screensaver/enabled -n -t bool -s false
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-screensaver -p /xfce4-screensaver/lock-enabled -n -t bool -s false
-
-      # Disable session power management locking
-      ${pkgs.xfce.xfconf}/bin/xfconf-query -c xfce4-session -p /xfce4-session/shutdown/LockScreen -n -t bool -s false
-
-      echo "XFCE screen lock and screensaver disabled"
-    '';
-  };
+  # Note: Screen lock disabling systemd service removed
+  # It was causing RDP sessions to hang. Users can configure via XFCE settings if needed.
 
   # Set default session to XFCE
   services.displayManager.defaultSession = "xfce";
