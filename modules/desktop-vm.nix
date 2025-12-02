@@ -14,12 +14,10 @@
       xterm.enable = false;
       xfce.enable = true;
     };
-    # Disable display manager for XRDP-only access (headless)
-    # XRDP's sesman will create X sessions on demand
-    displayManager.lightdm.enable = false;
   };
 
-  # Note: Screen locking/screensaver disabled via xfconf (see below)
+  # Disable screen locking and screensaver
+  services.xserver.displayManager.lightdm.greeters.gtk.indicators = [ "~host" "~spacer" "~clock" "~spacer" "~session" "~power" ];
 
   # Disable screensaver and screen lock via xfconf settings
   # Note: We use a systemd user service to apply these settings after login
@@ -59,8 +57,8 @@
     '';
   };
 
-  # For XRDP, we don't need a display manager
-  # XRDP's session manager (sesman) handles X session creation
+  # Set default session to XFCE
+  services.displayManager.defaultSession = "xfce";
 
   # Enable XRDP server (RDP backend for remote desktop)
   # Note: Guacamole removed due to lack of ARM64 support
