@@ -84,6 +84,9 @@
   users.users.robertwendt = {
     isNormalUser = true;
     extraGroups = [ "wheel" "incus-admin" ];
+    # Set hashed password for RDP login (if desktop environment is added)
+    # Password: "changeme" - change after first login
+    hashedPassword = "$6$9vhPdO0pHckaLgWm$8NPkLKelUAGCjDWTWn7RQ871s4ET3wTpf3zN2vxchyT5MYRkHUbOGXrtwXwMBHReKpLp5syshTLPPn9cid3sI/";
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
     ];
