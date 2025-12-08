@@ -44,7 +44,6 @@
     # Kubernetes tools
     kubectl
     kubernetes-helm
-    k9s  # Terminal UI for Kubernetes
     # Basic utilities
     vim
     curl
