@@ -19,6 +19,9 @@
 
     # Redis services
     ./redis.nix
+
+    # Incus for VMs with full KVM support
+    ./incus.nix
   ];
 
   # Nix settings
