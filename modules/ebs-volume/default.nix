@@ -100,6 +100,17 @@ let
         default = "/dev/sdf";
         description = "Device name for the EBS volume (e.g., /dev/sdf).";
       };
+
+      childDatasets = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = ''
+          List of child dataset names to create under the main dataset.
+          Each child dataset can be independently snapshotted.
+          Example: [ "vm1" "vm2" ] creates pool/dataset/vm1, pool/dataset/vm2
+        '';
+        example = [ "vm1" "vm2" "vm3" ];
+      };
     };
   };
 
@@ -344,6 +355,25 @@ in
             if [ -n "$DIRMODE" ]; then
               $CHMOD "$DIRMODE" ${lib.escapeShellArg (toString v.mountPoint)} || true
             fi
+
+            # Create child datasets for independent snapshots
+            ${lib.concatMapStringsSep "\n" (child: ''
+              if ! $ZFS list -H -o name "$POOL/$DATASET/${child}" >/dev/null 2>&1; then
+                echo "Creating child dataset $POOL/$DATASET/${child}"
+                $ZFS create -o mountpoint=${lib.escapeShellArg (toString v.mountPoint)}/${child} "$POOL/$DATASET/${child}"
+              fi
+              # Ensure child dataset is mounted
+              if ! mountpoint -q ${lib.escapeShellArg (toString v.mountPoint)}/${child} 2>/dev/null; then
+                $ZFS mount "$POOL/$DATASET/${child}" 2>/dev/null || true
+              fi
+              # Apply ownership to child dataset mount if configured
+              if [ -n "$OWNER" ] || [ -n "$GROUP" ]; then
+                $CHOWN "$TARGET" ${lib.escapeShellArg (toString v.mountPoint)}/${child} || true
+              fi
+              if [ -n "$DIRMODE" ]; then
+                $CHMOD "$DIRMODE" ${lib.escapeShellArg (toString v.mountPoint)}/${child} || true
+              fi
+            '') v.childDatasets}
           '';
         in
         {
@@ -355,7 +385,7 @@ in
             wants = [ "network-online.target" ];
             before = [ "shutdown.target" "reboot.target" "halt.target" ];
             conflicts = [ "shutdown.target" "reboot.target" "halt.target" ];
-            path = with pkgs; [ zfs util-linux ];
+            path = with pkgs; [ zfs util-linux gawk ];
             serviceConfig = {
               Type = "oneshot";
               RemainAfterExit = true;

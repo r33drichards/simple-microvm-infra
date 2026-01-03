@@ -53,6 +53,9 @@
   networking.hostName = "hypervisor";
 
   # EBS volume with ZFS for microvm storage (enables ZFS snapshots)
+  # Each VM gets its own child dataset for independent snapshots:
+  #   zfs snapshot microvms/storage/vm1@backup
+  #   zfs snapshot microvms/storage/vm2@backup
   services.ebsVolumes = {
     enable = true;
     volumes."microvm-storage" = {
@@ -62,6 +65,12 @@
       dataset = "storage";
       volumeType = "gp3";
       device = "/dev/sdf";
+      # Per-VM datasets for independent snapshots
+      childDatasets = [ "vm1" "vm2" "vm3" "vm4" "vm5" ];
+      # Ownership for microvm service
+      mountOwner = "microvm";
+      mountGroup = "kvm";
+      mountDirMode = "0755";
     };
   };
 
