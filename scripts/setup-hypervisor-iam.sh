@@ -106,6 +106,7 @@ POLICY_ARN="arn:aws:iam::$(aws sts get-caller-identity --query Account --output 
 if aws iam get-policy --policy-arn "$POLICY_ARN" &>/dev/null; then
     log_info "Policy exists, creating new version..."
     # Delete oldest version if we have 5 versions (AWS limit)
+    # shellcheck disable=SC2016
     VERSIONS=$(aws iam list-policy-versions --policy-arn "$POLICY_ARN" --query 'Versions[?IsDefaultVersion==`false`].VersionId' --output text)
     VERSION_COUNT=$(echo "$VERSIONS" | wc -w)
     if [[ "$VERSION_COUNT" -ge 4 ]]; then
