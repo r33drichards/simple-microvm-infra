@@ -82,10 +82,43 @@
         }
       ) vms;
 
+      # Script packages (for multiple systems)
+      setupHypervisorIam = system: let
+        pkgs' = nixpkgs.legacyPackages.${system};
+      in pkgs'.writeShellApplication {
+        name = "setup-hypervisor-iam";
+        runtimeInputs = with pkgs'; [ awscli2 curl jq ];
+        text = builtins.readFile ./scripts/setup-hypervisor-iam.sh;
+      };
+
     in {
       # Custom packages
       packages.${system} = {
         inherit playwright-mcp;
+        setup-hypervisor-iam = setupHypervisorIam system;
+      };
+
+      # Also provide for x86_64 (for running from local dev machines)
+      packages.x86_64-linux.setup-hypervisor-iam = setupHypervisorIam "x86_64-linux";
+      packages.x86_64-darwin.setup-hypervisor-iam = setupHypervisorIam "x86_64-darwin";
+      packages.aarch64-darwin.setup-hypervisor-iam = setupHypervisorIam "aarch64-darwin";
+
+      # Apps for `nix run`
+      apps.${system}.setup-hypervisor-iam = {
+        type = "app";
+        program = "${setupHypervisorIam system}/bin/setup-hypervisor-iam";
+      };
+      apps.x86_64-linux.setup-hypervisor-iam = {
+        type = "app";
+        program = "${setupHypervisorIam "x86_64-linux"}/bin/setup-hypervisor-iam";
+      };
+      apps.x86_64-darwin.setup-hypervisor-iam = {
+        type = "app";
+        program = "${setupHypervisorIam "x86_64-darwin"}/bin/setup-hypervisor-iam";
+      };
+      apps.aarch64-darwin.setup-hypervisor-iam = {
+        type = "app";
+        program = "${setupHypervisorIam "aarch64-darwin"}/bin/setup-hypervisor-iam";
       };
 
       # All system configurations

@@ -86,6 +86,40 @@ ssh root@10.1.0.2
 ssh root@10.1.0.2
 ```
 
+## EBS Volume Setup (Optional)
+
+If you want to use EBS volumes with ZFS for persistent storage with snapshot support, you need to set up IAM permissions for the hypervisor instance.
+
+**Setup IAM Role:**
+
+```bash
+# Run from your local machine (requires AWS CLI with admin permissions)
+# Automatically detects instance ID if run from the hypervisor, or provide it:
+nix run .#setup-hypervisor-iam -- i-0123456789abcdef0
+
+# Or run directly from the hypervisor:
+nix run .#setup-hypervisor-iam
+```
+
+This script is idempotent and will:
+- Create an IAM policy with EBS volume permissions
+- Create an IAM role with EC2 trust policy
+- Create an instance profile and attach it to the hypervisor
+
+**What permissions are granted:**
+- `ec2:DescribeVolumes`, `ec2:CreateVolume`, `ec2:DeleteVolume`
+- `ec2:AttachVolume`, `ec2:DetachVolume`, `ec2:ModifyVolume`
+- `ec2:DescribeVolumeStatus`, `ec2:DescribeVolumeAttribute`
+- `ec2:CreateTags`, `ec2:DescribeTags`, `ec2:DescribeInstances`
+
+After setup, the EBS volume service will automatically create, attach, and mount ZFS volumes as configured in `hosts/hypervisor/default.nix`. See the [EBS Volume Module documentation](modules/ebs-volume/README.md) for configuration options.
+
+**Verify setup:**
+```bash
+# On the hypervisor, restart the EBS service:
+ssh root@<hypervisor> 'systemctl restart ebs-volume-microvm-storage && journalctl -u ebs-volume-microvm-storage -f'
+```
+
 ## Project Structure
 
 ```
@@ -105,6 +139,8 @@ simple-microvm-infra/
 ├── lib/                       # Helper functions
 │   ├── default.nix            # microvmSystem builder
 │   └── create-vm.nix          # VM factory function
+├── scripts/                   # Utility scripts
+│   └── setup-hypervisor-iam.sh  # IAM role setup for EBS
 └── flake.nix                  # Main entry point + VM definitions
 ```
 
