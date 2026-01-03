@@ -73,7 +73,8 @@ in
           type nat hook prerouting priority dstnat; policy accept;
 
           # Forward AWS Instance Metadata Service requests from VMs to hypervisor's IMDS
-          # Allows VMs to access EC2 instance role credentials at 169.254.169.254
+          # Note: VMs only have a route to IMDS when microvm.allowIMDS = true (default: false)
+          # This rule only applies if a VM has the route configured
           ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 tcp dport 80 dnat to 169.254.169.254:80
 
           # Redirect ALL DNS queries from VMs to local CoreDNS (DNS allowlist filtering)
@@ -88,6 +89,7 @@ in
           type nat hook postrouting priority srcnat; policy accept;
 
           # Masquerade IMDS traffic so IMDS sees requests as coming from hypervisor
+          # Note: Only applies when VM has microvm.allowIMDS = true (default: false)
           ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 masquerade
 
           # Masquerade VM traffic to internet via external interface (AWS a1.metal)

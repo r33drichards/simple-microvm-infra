@@ -23,6 +23,19 @@ in
     example = "vm1";
   };
 
+  # Option: allow access to AWS Instance Metadata Service (IMDS)
+  # Security: Disabled by default to prevent credential exposure
+  options.microvm.allowIMDS = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Whether to allow this VM to access the AWS Instance Metadata Service (IMDS).
+      When enabled, adds a route to 169.254.169.254 through the gateway.
+      Disabled by default for security - VMs should not have access to EC2
+      instance role credentials unless explicitly required.
+    '';
+  };
+
   config = {
     # Use QEMU (better ARM64 device support)
     microvm.hypervisor = "qemu";
@@ -124,8 +137,8 @@ in
         DHCP = "no";
       };
       # Route AWS Instance Metadata Service (IMDS) through gateway
-      # This allows VMs to access EC2 instance role credentials
-      routes = [
+      # Only enabled when microvm.allowIMDS = true (disabled by default for security)
+      routes = lib.mkIf config.microvm.allowIMDS [
         {
           routeConfig = {
             Destination = "169.254.169.254/32";
