@@ -24,6 +24,7 @@
   networking.firewall = {
     # Allow Kubernetes API server
     allowedTCPPorts = [
+      22     # SSH
       6443   # Kubernetes API server
       10250  # Kubelet API
       80     # HTTP (for ingress)

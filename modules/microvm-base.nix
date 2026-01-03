@@ -118,7 +118,9 @@ in
         # VM gets .2 in its subnet (gateway is .1 on host)
         Address = "${vmNetwork.subnet}.2/24";
         Gateway = "${vmNetwork.subnet}.1";
-        DNS = "1.1.1.1";  # Cloudflare DNS
+        # Use hypervisor as DNS (runs CoreDNS with allowlist filtering)
+        # All DNS queries are redirected to hypervisor via nftables anyway
+        DNS = "${vmNetwork.subnet}.1";
         DHCP = "no";
       };
       # Route AWS Instance Metadata Service (IMDS) through gateway
@@ -214,9 +216,13 @@ in
     # CHANGE THIS in production!
     users.users.root.initialPassword = "nixos";
 
-    # SSH key for root user (same as hypervisor)
+    # SSH keys for root user
     users.users.root.openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
+      # Hypervisor's key - allows SSH from hypervisor to VMs
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGgfMmLS077IliGfXWUHTzI9ZBWFm6Vkn4m+NXvlmmOw root@ip-172-31-22-108.ec2.internal"
+      # AWS Secrets Manager key (rw-ssh-key) - allows ProxyJump from dev machines
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
     ];
 
     # Create robertwendt user (same as hypervisor)
@@ -225,6 +231,10 @@ in
       extraGroups = [ "wheel" "docker" ];
       openssh.authorizedKeys.keys = [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
+        # Hypervisor's key - allows SSH from hypervisor to VMs
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGgfMmLS077IliGfXWUHTzI9ZBWFm6Vkn4m+NXvlmmOw root@ip-172-31-22-108.ec2.internal"
+        # AWS Secrets Manager key (rw-ssh-key) - allows ProxyJump from dev machines
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
       ];
     };
 

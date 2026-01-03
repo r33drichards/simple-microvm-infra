@@ -22,6 +22,9 @@
 
     # Incus for VMs with full KVM support
     ./incus.nix
+
+    # DNS allowlist filtering for MicroVMs
+    ./dns-allowlist.nix
   ];
 
   # Nix settings
@@ -183,6 +186,17 @@
 
   # Auto-start all VMs on boot
   microvm.autostart = [ "vm1" "vm2" "vm3" "vm4" "vm5" ];
+
+  # Keep VM runners as GC roots to prevent garbage collection
+  # This ensures the microvm runners aren't deleted during nix-collect-garbage
+  # Access via self.nixosConfigurations since VMs are defined at flake level
+  system.extraDependencies = [
+    self.nixosConfigurations.vm1.config.microvm.declaredRunner
+    self.nixosConfigurations.vm2.config.microvm.declaredRunner
+    self.nixosConfigurations.vm3.config.microvm.declaredRunner
+    self.nixosConfigurations.vm4.config.microvm.declaredRunner
+    self.nixosConfigurations.vm5.config.microvm.declaredRunner
+  ];
 
   # Create MicroVM storage directory on root filesystem
   # This is simpler than ZFS but uses the root volume for storage
