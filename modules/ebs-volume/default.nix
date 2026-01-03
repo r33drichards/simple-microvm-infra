@@ -206,9 +206,36 @@ in
             fi
 
             echo "Ensuring volume $VOLUME_ID is attached to $IID"
-            ATTACHED=$($AWS ec2 describe-volumes --region "$REGION" --volume-ids "$VOLUME_ID" --query "Volumes[0].Attachments[?InstanceId=='$IID'].State | [0]" --output text || true)
-            if [ "$ATTACHED" != "attached" ]; then
+
+            # Check current attachment state
+            VOLUME_INFO=$($AWS ec2 describe-volumes --region "$REGION" --volume-ids "$VOLUME_ID" --output json)
+            CURRENT_INSTANCE=$(echo "$VOLUME_INFO" | $JQ -r '.Volumes[0].Attachments[0].InstanceId // empty')
+            ATTACH_STATE=$(echo "$VOLUME_INFO" | $JQ -r '.Volumes[0].Attachments[0].State // empty')
+
+            if [ "$CURRENT_INSTANCE" = "$IID" ] && [ "$ATTACH_STATE" = "attached" ]; then
+              echo "Volume already attached to this instance"
+            elif [ -n "$CURRENT_INSTANCE" ] && [ "$CURRENT_INSTANCE" != "$IID" ]; then
+              # Volume attached to different instance - check if that instance is dead
+              OTHER_STATE=$($AWS ec2 describe-instances --region "$REGION" --instance-ids "$CURRENT_INSTANCE" \
+                --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "terminated")
+
+              if [ "$OTHER_STATE" = "terminated" ] || [ "$OTHER_STATE" = "shutting-down" ] || [ "$OTHER_STATE" = "stopped" ]; then
+                echo "Volume attached to dead/stopped instance $CURRENT_INSTANCE ($OTHER_STATE), force detaching..."
+                $AWS ec2 detach-volume --region "$REGION" --volume-id "$VOLUME_ID" --force >/dev/null || true
+                echo "Waiting for volume to become available..."
+                $AWS ec2 wait volume-available --region "$REGION" --volume-ids "$VOLUME_ID"
+              else
+                echo "ERROR: Volume is attached to running instance $CURRENT_INSTANCE" >&2
+                exit 1
+              fi
+
+              # Now attach to this instance
               $AWS ec2 attach-volume --region "$REGION" --volume-id "$VOLUME_ID" --instance-id "$IID" --device ${lib.escapeShellArg v.device} >/dev/null
+              echo "Waiting for volume to be in-use..."
+              $AWS ec2 wait volume-in-use --region "$REGION" --volume-ids "$VOLUME_ID"
+            else
+              # Volume is available or in unknown state, try to attach
+              $AWS ec2 attach-volume --region "$REGION" --volume-id "$VOLUME_ID" --instance-id "$IID" --device ${lib.escapeShellArg v.device} >/dev/null 2>&1 || true
               echo "Waiting for volume to be in-use..."
               $AWS ec2 wait volume-in-use --region "$REGION" --volume-ids "$VOLUME_ID"
             fi
@@ -254,19 +281,34 @@ in
             fi
 
             # Import or create ZFS pool on the device
-            if ! $ZPOOL list -H -o name | grep -qx "$POOL"; then
-              if $ZPOOL import -N "$POOL" >/dev/null 2>&1; then
+            if $ZPOOL list -H -o name 2>/dev/null | grep -qx "$POOL"; then
+              echo "ZFS pool $POOL already imported"
+            else
+              # Try to import existing pool from the device
+              # Use -d to specify device directory for reliable import after hardware changes
+              if $ZPOOL import -d /dev/disk/by-id -N "$POOL" >/dev/null 2>&1; then
                 echo "Imported existing ZFS pool $POOL"
+              elif $ZPOOL import -d "$(dirname "$DEVICE")" -N "$POOL" >/dev/null 2>&1; then
+                echo "Imported existing ZFS pool $POOL from device directory"
               else
-                echo "Creating ZFS pool $POOL on $DEVICE"
-                $ZPOOL create -f \
-                  -o ashift=12 \
-                  -O compression=zstd \
-                  -O xattr=sa \
-                  -O acltype=posixacl \
-                  -O atime=off \
-                  -O mountpoint=none \
-                  "$POOL" "$DEVICE"
+                # Check if the device already has a ZFS pool with different name
+                EXISTING_POOL=$($ZPOOL import -d "$(dirname "$DEVICE")" 2>/dev/null | grep "pool:" | awk '{print $2}' | head -1)
+                if [ -n "$EXISTING_POOL" ]; then
+                  echo "WARNING: Device has existing pool '$EXISTING_POOL', expected '$POOL'"
+                  echo "Importing as $EXISTING_POOL (will use existing pool name)"
+                  $ZPOOL import -d "$(dirname "$DEVICE")" -N "$EXISTING_POOL" >/dev/null 2>&1 || true
+                  POOL="$EXISTING_POOL"
+                else
+                  echo "Creating ZFS pool $POOL on $DEVICE"
+                  $ZPOOL create -f \
+                    -o ashift=12 \
+                    -O compression=zstd \
+                    -O xattr=sa \
+                    -O acltype=posixacl \
+                    -O atime=off \
+                    -O mountpoint=none \
+                    "$POOL" "$DEVICE"
+                fi
               fi
             fi
 
@@ -311,11 +353,32 @@ in
             wantedBy = [ "multi-user.target" ];
             after = [ "network-online.target" ];
             wants = [ "network-online.target" ];
-            path = with pkgs; [ zfs  util-linux];
+            before = [ "shutdown.target" "reboot.target" "halt.target" ];
+            conflicts = [ "shutdown.target" "reboot.target" "halt.target" ];
+            path = with pkgs; [ zfs util-linux ];
             serviceConfig = {
               Type = "oneshot";
               RemainAfterExit = true;
               ExecStart = ensureScript;
+              # Clean shutdown: unmount and export pool for safe detachment
+              ExecStop = pkgs.writeShellScript "stop-${unitName}" ''
+                set -euo pipefail
+                POOL=${lib.escapeShellArg v.poolName}
+                MOUNT=${lib.escapeShellArg (toString v.mountPoint)}
+                ZPOOL=${pkgs.zfs}/bin/zpool
+
+                # Unmount if mounted
+                if mountpoint -q "$MOUNT" 2>/dev/null; then
+                  echo "Unmounting $MOUNT"
+                  umount "$MOUNT" || true
+                fi
+
+                # Export pool for clean detachment
+                if $ZPOOL list -H -o name 2>/dev/null | grep -qx "$POOL"; then
+                  echo "Exporting ZFS pool $POOL"
+                  $ZPOOL export "$POOL" || true
+                fi
+              '';
             };
           };
         }
