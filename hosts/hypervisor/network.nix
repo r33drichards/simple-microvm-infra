@@ -49,8 +49,10 @@ in
   ) networks.networks;
 
   # Enable IP forwarding (required for NAT and VM routing)
+  # Enable route_localnet to allow DNAT to 127.0.0.1 (for CoreDNS)
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;
+    "net.ipv4.conf.all.route_localnet" = 1;
   };
 
   # Disable legacy iptables-based firewall and NAT
@@ -76,8 +78,9 @@ in
 
           # Redirect ALL DNS queries from VMs to local CoreDNS (DNS allowlist filtering)
           # This forces VMs to use the hypervisor's filtered DNS resolver
-          iifname { ${bridgeList} } udp dport 53 redirect to :53
-          iifname { ${bridgeList} } tcp dport 53 redirect to :53
+          # Use DNAT to 127.0.0.1 so CoreDNS can bind to localhost only
+          iifname { ${bridgeList} } udp dport 53 dnat to 127.0.0.1:53
+          iifname { ${bridgeList} } tcp dport 53 dnat to 127.0.0.1:53
         }
 
         # Postrouting: Masquerade for internet and IMDS

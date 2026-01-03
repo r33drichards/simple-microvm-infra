@@ -176,17 +176,8 @@ let
     "login.tailscale.com"
   ];
 
-  # MicroVM gateway IPs that CoreDNS should bind to
-  # These are the gateway addresses for each VM's bridge network
-  bindAddresses = [
-    "10.1.0.1"  # br-vm1
-    "10.2.0.1"  # br-vm2
-    "10.3.0.1"  # br-vm3
-    "10.4.0.1"  # br-vm4
-    "10.5.0.1"  # br-vm5
-  ];
-
-  bindDirective = "bind ${lib.concatStringsSep " " bindAddresses}";
+  # Bind to localhost - nftables will DNAT VM DNS traffic to 127.0.0.1:53
+  bindDirective = "bind 127.0.0.1";
 
   # Generate CoreDNS config with forward blocks for each allowed domain
   # and a catch-all block that returns NXDOMAIN
@@ -217,6 +208,12 @@ let
   '';
 
 in {
+  # Disable systemd-resolved stub listener to free up port 53
+  # CoreDNS will handle all DNS for VMs via nftables redirect
+  services.resolved.extraConfig = ''
+    DNSStubListener=no
+  '';
+
   # CoreDNS configuration
   services.coredns = {
     enable = true;
@@ -226,6 +223,8 @@ in {
   # Open DNS port for VMs (port 53)
   # This is handled by nftables in network.nix, but we ensure the service binds correctly
   systemd.services.coredns = {
+    # Start after resolved has disabled its stub listener
+    after = [ "systemd-resolved.service" ];
     serviceConfig = {
       # Ensure CoreDNS can bind to privileged port 53
       AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
