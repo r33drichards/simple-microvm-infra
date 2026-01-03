@@ -118,7 +118,9 @@ in
         # VM gets .2 in its subnet (gateway is .1 on host)
         Address = "${vmNetwork.subnet}.2/24";
         Gateway = "${vmNetwork.subnet}.1";
-        DNS = "1.1.1.1";  # Cloudflare DNS
+        # Use hypervisor as DNS (runs CoreDNS with allowlist filtering)
+        # All DNS queries are redirected to hypervisor via nftables anyway
+        DNS = "${vmNetwork.subnet}.1";
         DHCP = "no";
       };
       # Route AWS Instance Metadata Service (IMDS) through gateway

@@ -22,6 +22,9 @@
 
     # Incus for VMs with full KVM support
     ./incus.nix
+
+    # DNS allowlist filtering for MicroVMs
+    ./dns-allowlist.nix
   ];
 
   # Nix settings

@@ -66,13 +66,18 @@ in
     ruleset = ''
       # NAT table for internet access and IMDS forwarding
       table ip nat {
-        # Prerouting: DNAT for IMDS requests from VMs
+        # Prerouting: DNAT for IMDS and DNS redirect
         chain prerouting {
           type nat hook prerouting priority dstnat; policy accept;
 
           # Forward AWS Instance Metadata Service requests from VMs to hypervisor's IMDS
           # Allows VMs to access EC2 instance role credentials at 169.254.169.254
           ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 tcp dport 80 dnat to 169.254.169.254:80
+
+          # Redirect ALL DNS queries from VMs to local CoreDNS (DNS allowlist filtering)
+          # This forces VMs to use the hypervisor's filtered DNS resolver
+          iifname { ${bridgeList} } udp dport 53 redirect to :53
+          iifname { ${bridgeList} } tcp dport 53 redirect to :53
         }
 
         # Postrouting: Masquerade for internet and IMDS
@@ -125,6 +130,9 @@ in
 
           # Accept Tailscale to VM traffic (allow remote access via VPN)
           iifname "tailscale0" oifname { ${bridgeList} } accept
+
+          # Block DNS-over-TLS (port 853) to prevent DNS filtering bypass
+          iifname { ${bridgeList} } tcp dport 853 drop
 
           # Accept VM to internet traffic
           iifname { ${bridgeList} } oifname "enP2p4s0" accept
