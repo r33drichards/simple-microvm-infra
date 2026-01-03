@@ -146,10 +146,17 @@ in
             # Ensure mount point exists
             mkdir -p ${lib.escapeShellArg (toString v.mountPoint)}
 
-            # Metadata
-            IID=$($CURL -s http://169.254.169.254/latest/meta-data/instance-id)
-            REGION=$($CURL -s http://169.254.169.254/latest/dynamic/instance-identity/document | $JQ -r .region)
-            AZ=$($CURL -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+            # Get IMDSv2 token (required for instances with IMDSv2 enforcement)
+            IMDS_TOKEN=$($CURL -s -X PUT "http://169.254.169.254/latest/api/token" \
+              -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+
+            # Metadata using IMDSv2
+            IID=$($CURL -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+              http://169.254.169.254/latest/meta-data/instance-id)
+            REGION=$($CURL -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+              http://169.254.169.254/latest/dynamic/instance-identity/document | $JQ -r .region)
+            AZ=$($CURL -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+              http://169.254.169.254/latest/meta-data/placement/availability-zone)
 
             # Lookup the most recent volume by Name tag within this AZ.
             # Add retries to avoid transient AWS API/network issues that could
