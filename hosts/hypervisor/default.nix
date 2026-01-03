@@ -25,6 +25,9 @@
 
     # DNS allowlist filtering for MicroVMs
     ./dns-allowlist.nix
+
+    # EBS volume management with ZFS
+    ../../modules/ebs-volume
   ];
 
   # Nix settings
@@ -48,6 +51,19 @@
   nixpkgs.config.allowUnfree = true;
 
   networking.hostName = "hypervisor";
+
+  # EBS volume with ZFS for microvm storage (enables ZFS snapshots)
+  services.ebsVolumes = {
+    enable = true;
+    volumes."microvm-storage" = {
+      mountPoint = "/var/lib/microvms";
+      sizeGiB = 100;
+      poolName = "microvms";
+      dataset = "storage";
+      volumeType = "gp3";
+      device = "/dev/sdf";
+    };
+  };
 
   # Tailscale for remote access and subnet routing
   services.tailscale.enable = true;
