@@ -321,29 +321,15 @@ in
         }
       ) vols;
 
-      fileSystemsCfg = lib.mapAttrsToList (
-        name: v:
-        let unitName = "ebs-volume-" + escapeUnit name + ".service"; in
-        {
-          name = toString v.mountPoint;
-          value = {
-            device = "${v.poolName}/${v.dataset}";
-            fsType = "zfs";
-            options = v.mountOptions ++ [
-              "x-systemd.requires=${unitName}"
-              "x-systemd.after=${unitName}"
-            ];
-          };
-        }
-      ) vols;
-
     in
     {
       environment.systemPackages = [ pkgs.awscli2 pkgs.jq pkgs.curl pkgs.nvme-cli pkgs.zfs ];
 
       systemd.services = lib.listToAttrs ensureUnits;
 
-      fileSystems = lib.listToAttrs fileSystemsCfg;
+      # Note: We intentionally do NOT add fileSystems entries here.
+      # The ebs-volume service handles mounting directly. Adding fileSystems
+      # would trigger automatic ZFS pool import before the pool exists.
 
       # Ensure ZFS support; ebs-volume units handle import and mounting
       boot.supportedFilesystems = [ "zfs" ];
