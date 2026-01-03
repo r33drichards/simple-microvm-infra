@@ -5,10 +5,11 @@ This document provides detailed diagrams and explanations of the network archite
 ## Table of Contents
 1. [Physical/Virtual Topology](#physicalvirtual-topology)
 2. [Network Traffic Flows](#network-traffic-flows)
-3. [nftables Chain Processing](#nftables-chain-processing)
-4. [Isolation Mechanism](#isolation-mechanism)
-5. [IP Address Allocation](#ip-address-allocation)
-6. [Traffic Flow Examples](#traffic-flow-examples)
+3. [DNS-Based Allowlist Filtering](#dns-based-allowlist-filtering)
+4. [nftables Chain Processing](#nftables-chain-processing)
+5. [Isolation Mechanism](#isolation-mechanism)
+6. [IP Address Allocation](#ip-address-allocation)
+7. [Traffic Flow Examples](#traffic-flow-examples)
 
 ---
 
@@ -32,7 +33,9 @@ graph LR
             enP2p4s0["enP2p4s0<br/>54.201.157.166<br/>(AWS Physical)"]
         end
 
-        nftables["nftables<br/>• NAT (IMDS, Internet)<br/>• Firewall (Isolation)<br/>• Forwarding Rules"]
+        nftables["nftables<br/>• NAT (IMDS, Internet)<br/>• Firewall (Isolation)<br/>• DNS DNAT (port 53)<br/>• Forwarding Rules"]
+
+        CoreDNS["CoreDNS<br/>127.0.0.1:53<br/>• Allowlist Filtering<br/>• Default-Deny Policy"]
 
         subgraph VMNetwork["VM Network Infrastructure"]
             subgraph VM1Net["VM1 Network"]
@@ -82,6 +85,9 @@ graph LR
     tailscale0 <--> nftables
     enP2p4s0 <--> nftables
 
+    %% DNS filtering
+    nftables -.DNS DNAT.-> CoreDNS
+
     %% nftables to bridges (organized to avoid crossings)
     nftables <--> br1
     nftables <--> br2
@@ -108,6 +114,7 @@ graph LR
     style Hypervisor fill:#fff4e1
     style NetLayer fill:#fff9e6
     style nftables fill:#ffebee
+    style CoreDNS fill:#e1f5fe
     style VMNetwork fill:#f5f5f5
     style VM1Net fill:#e3f2fd
     style VM2Net fill:#e8f5e9
@@ -208,6 +215,267 @@ sequenceDiagram
     Note over VM1: Connection timeout<br/>(no response)
 ```
 
+### Flow 5: DNS Query (Allowed Domain)
+
+```mermaid
+sequenceDiagram
+    participant VM1 as VM1<br/>(10.1.0.2)
+    participant GW as br-vm1<br/>(10.1.0.1)
+    participant NFT as nftables
+    participant DNS as CoreDNS<br/>(127.0.0.1:53)
+    participant Upstream as Upstream DNS<br/>(1.1.1.1)
+
+    Note over VM1: nslookup github.com
+    VM1->>GW: DNS query: github.com<br/>src: 10.1.0.2:54321<br/>dst: 10.1.0.1:53
+    GW->>NFT: Prerouting chain
+    Note over NFT: DNAT Rule:<br/>iifname br-vm* udp dport 53<br/>dnat to 127.0.0.1:53
+    NFT->>DNS: DNS query redirected<br/>dst: 127.0.0.1:53
+    Note over DNS: Domain "github.com"<br/>matches allowlist ✅
+    DNS->>Upstream: Forward query to 1.1.1.1
+    Upstream-->>DNS: Response: 140.82.112.3
+    DNS-->>NFT: DNS response
+    Note over NFT: Connection tracking:<br/>reverse NAT
+    NFT-->>GW: Response to 10.1.0.2
+    GW-->>VM1: github.com = 140.82.112.3 ✅
+```
+
+### Flow 6: DNS Query (Blocked Domain)
+
+```mermaid
+sequenceDiagram
+    participant VM1 as VM1<br/>(10.1.0.2)
+    participant GW as br-vm1<br/>(10.1.0.1)
+    participant NFT as nftables
+    participant DNS as CoreDNS<br/>(127.0.0.1:53)
+
+    Note over VM1: nslookup malicious-site.com
+    VM1->>GW: DNS query: malicious-site.com<br/>src: 10.1.0.2:54322<br/>dst: 10.1.0.1:53
+    GW->>NFT: Prerouting chain
+    Note over NFT: DNAT Rule:<br/>iifname br-vm* udp dport 53<br/>dnat to 127.0.0.1:53
+    NFT->>DNS: DNS query redirected
+    Note over DNS: Domain "malicious-site.com"<br/>NOT in allowlist ❌
+    DNS->>DNS: Log: denial
+    DNS-->>NFT: NXDOMAIN response
+    NFT-->>GW: Response to 10.1.0.2
+    GW-->>VM1: NXDOMAIN (domain not found) ❌
+    Note over VM1: Resolution failed<br/>(cannot connect)
+```
+
+---
+
+## DNS-Based Allowlist Filtering
+
+The infrastructure implements DNS-based egress filtering using CoreDNS. This provides a default-deny policy where VMs can only resolve domains on an explicit allowlist.
+
+### Architecture Overview
+
+```mermaid
+graph TB
+    subgraph VMs["Virtual Machines"]
+        VM1["VM1<br/>DNS: 10.1.0.1"]
+        VM2["VM2<br/>DNS: 10.2.0.1"]
+        VM3["VM3<br/>DNS: 10.3.0.1"]
+    end
+
+    subgraph Hypervisor["Hypervisor"]
+        subgraph Bridges["VM Bridges"]
+            BR1["br-vm1<br/>10.1.0.1"]
+            BR2["br-vm2<br/>10.2.0.1"]
+            BR3["br-vm3<br/>10.3.0.1"]
+        end
+
+        NFT["nftables<br/>DNAT port 53<br/>→ 127.0.0.1:53"]
+
+        subgraph CoreDNS["CoreDNS (127.0.0.1:53)"]
+            Allowlist["Allowlist Check"]
+            Forward["Forward to Upstream"]
+            Deny["Return NXDOMAIN"]
+        end
+    end
+
+    subgraph Upstream["Upstream DNS"]
+        CF["Cloudflare<br/>1.1.1.1"]
+        Google["Google<br/>8.8.8.8"]
+    end
+
+    VM1 -->|DNS query| BR1
+    VM2 -->|DNS query| BR2
+    VM3 -->|DNS query| BR3
+
+    BR1 --> NFT
+    BR2 --> NFT
+    BR3 --> NFT
+
+    NFT -->|Redirect| Allowlist
+    Allowlist -->|Allowed| Forward
+    Allowlist -->|Blocked| Deny
+
+    Forward --> CF
+    Forward --> Google
+
+    style VMs fill:#e8f5e9
+    style Hypervisor fill:#fff4e1
+    style CoreDNS fill:#e1f5fe
+    style Upstream fill:#f3e5f5
+    style Deny fill:#ffcdd2
+```
+
+### How DNS Filtering Works
+
+1. **VM Configuration**: Each VM is configured to use its gateway IP (10.x.0.1) as the DNS resolver
+2. **Transparent Interception**: nftables DNAT rules intercept ALL port 53 traffic from VM bridges
+3. **Redirection to localhost**: DNS queries are redirected to CoreDNS running on 127.0.0.1:53
+4. **Allowlist Check**: CoreDNS checks if the domain is in the allowlist
+5. **Forward or Deny**: Allowed domains are forwarded to upstream; blocked domains get NXDOMAIN
+
+### nftables DNAT Rules
+
+```nft
+table ip nat {
+    chain prerouting {
+        type nat hook prerouting priority dstnat;
+
+        # Redirect all DNS traffic from VMs to CoreDNS
+        iifname { "br-vm1", "br-vm2", "br-vm3", "br-vm4", "br-vm5" } udp dport 53 dnat to 127.0.0.1:53
+        iifname { "br-vm1", "br-vm2", "br-vm3", "br-vm4", "br-vm5" } tcp dport 53 dnat to 127.0.0.1:53
+    }
+}
+
+table inet filter {
+    chain forward {
+        # Block DNS-over-TLS to prevent bypass
+        iifname { "br-vm1", "br-vm2", "br-vm3", "br-vm4", "br-vm5" } tcp dport 853 drop
+    }
+}
+```
+
+**Key Points:**
+- Both UDP and TCP DNS are redirected
+- DNS-over-TLS (port 853) is explicitly blocked to prevent bypass
+- Requires `net.ipv4.conf.all.route_localnet = 1` to allow DNAT to 127.0.0.1
+
+### CoreDNS Configuration
+
+CoreDNS uses a per-domain forward block configuration:
+
+```corefile
+# Allowed domain example
+github.com:53 {
+    bind 127.0.0.1
+    forward . 1.1.1.1 8.8.8.8
+    cache 300
+    log
+}
+
+# Default-deny catch-all
+.:53 {
+    bind 127.0.0.1
+    log . {
+        class denial
+    }
+    template ANY ANY {
+        rcode NXDOMAIN
+    }
+}
+```
+
+### Allowlist Categories
+
+The allowlist includes domains organized by category:
+
+| Category | Example Domains | Purpose |
+|----------|-----------------|---------|
+| **Package Registries** | `registry.npmjs.org`, `pypi.org`, `crates.io` | Package downloads |
+| **Code Hosting** | `github.com`, `gitlab.com`, `bitbucket.org` | Source code, git operations |
+| **Container Registries** | `docker.io`, `ghcr.io`, `quay.io` | Container images |
+| **CDNs** | `cloudflare.com`, `fastly.com`, `jsdelivr.net` | Static assets |
+| **Linux Repos** | `archive.ubuntu.com`, `deb.debian.org` | System packages |
+| **AI Services** | `api.anthropic.com`, `api.openai.com` | AI API access |
+| **NixOS** | `cache.nixos.org`, `channels.nixos.org` | Nix packages |
+| **Cloud Providers** | `s3.amazonaws.com`, `storage.googleapis.com` | Cloud storage |
+| **VPN** | `tailscale.com`, `controlplane.tailscale.com` | VPN connectivity |
+
+**Total Allowed Domains:** ~177 domains (with automatic subdomain coverage)
+
+### DNS Query Flow
+
+```mermaid
+graph LR
+    subgraph VM["VM (10.x.0.2)"]
+        App["Application"]
+    end
+
+    subgraph Gateway["Gateway (10.x.0.1)"]
+        Bridge["br-vmX"]
+    end
+
+    subgraph Prerouting["nftables Prerouting"]
+        DNAT["DNAT<br/>→ 127.0.0.1:53"]
+    end
+
+    subgraph CoreDNS["CoreDNS"]
+        Check{In Allowlist?}
+        Forward["Forward to<br/>1.1.1.1 / 8.8.8.8"]
+        Block["NXDOMAIN"]
+    end
+
+    subgraph Upstream["Upstream DNS"]
+        Resolver["1.1.1.1"]
+    end
+
+    App -->|DNS query<br/>port 53| Bridge
+    Bridge --> DNAT
+    DNAT --> Check
+    Check -->|Yes| Forward
+    Check -->|No| Block
+    Forward --> Resolver
+    Resolver -->|IP address| Forward
+    Forward -->|Response| App
+    Block -->|NXDOMAIN| App
+
+    style Block fill:#ffcdd2
+    style Forward fill:#c8e6c9
+```
+
+### Security Benefits
+
+1. **Default-Deny Policy**: Only explicitly allowed domains can be resolved
+2. **Transparent Enforcement**: VMs cannot bypass filtering - all DNS is intercepted at network layer
+3. **DoT Prevention**: DNS-over-TLS is blocked to prevent encrypted DNS bypass
+4. **Audit Logging**: All DNS queries (allowed and denied) are logged
+5. **Subdomain Coverage**: Allowing `github.com` automatically covers `*.github.com`
+
+### Bypass Prevention
+
+The filtering cannot be bypassed by VMs because:
+
+| Bypass Attempt | Prevention |
+|----------------|------------|
+| Use different DNS server (e.g., 8.8.8.8 directly) | All port 53 traffic is DNAT'd to CoreDNS |
+| Use DNS-over-TLS (port 853) | Port 853 is explicitly blocked |
+| Use DNS-over-HTTPS (DoH) | Would require HTTPS to a blocked domain |
+| Hardcode IP addresses | Only works if attacker knows IPs in advance |
+
+### Troubleshooting DNS Filtering
+
+```bash
+# Check CoreDNS status
+systemctl status coredns
+
+# View DNS query logs
+journalctl -u coredns -f
+
+# Test DNS resolution from VM
+ssh 10.1.0.2 "nslookup github.com"      # Should resolve
+ssh 10.1.0.2 "nslookup evil-site.com"   # Should fail with NXDOMAIN
+
+# Verify DNAT rules
+nft list chain ip nat prerouting
+
+# Check if port 853 is blocked
+ssh 10.1.0.2 "nc -zv 1.1.1.1 853"       # Should timeout/fail
+```
+
 ---
 
 ## nftables Chain Processing
@@ -246,6 +514,8 @@ graph TB
     end
 
     subgraph NAT_Pre["PREROUTING (NAT)"]
+        PRE_DNS{DNS<br/>port 53?}
+        PRE_DNS_DNAT[DNAT to<br/>127.0.0.1:53<br/>CoreDNS]
         PRE_IMDS{IMDS<br/>request?}
         PRE_DNAT[DNAT to<br/>169.254.169.254]
         PRE_CONTINUE[Continue]
@@ -258,7 +528,10 @@ graph TB
         POST_CONTINUE[Continue]
     end
 
-    PKT --> PRE_IMDS
+    PKT --> PRE_DNS
+    PRE_DNS -->|Yes| PRE_DNS_DNAT
+    PRE_DNS -->|No| PRE_IMDS
+    PRE_DNS_DNAT --> ROUTE
     PRE_IMDS -->|Yes| PRE_DNAT
     PRE_IMDS -->|No| PRE_CONTINUE
     PRE_DNAT --> ROUTE
@@ -305,6 +578,7 @@ graph TB
     style NAT_Post fill:#e8f5e9
     style FWD_DROP fill:#ffcdd2
     style INPUT_LOG fill:#ffcdd2
+    style PRE_DNS_DNAT fill:#e1f5fe
 ```
 
 ---
@@ -403,7 +677,7 @@ systemd.network.networks."10-lan" = {
   matchConfig.Type = "ether";
   address = [ "10.1.0.2/24" ];
   gateway = [ "10.1.0.1" ];
-  dns = [ "1.1.1.1" "8.8.8.8" ];
+  dns = [ "10.1.0.1" ];  # Points to gateway for DNS filtering
 };
 ```
 
@@ -412,6 +686,7 @@ systemd.network.networks."10-lan" = {
 - No DHCP server needed
 - Faster boot times
 - Simplified troubleshooting
+- DNS queries routed through allowlist filtering
 
 ---
 
@@ -520,11 +795,12 @@ sequenceDiagram
 
 ### Architecture Principles
 
-1. **Defense in Depth**: Multiple layers of isolation (bridges, nftables, connection tracking)
+1. **Defense in Depth**: Multiple layers of isolation (bridges, nftables, DNS filtering, connection tracking)
 2. **Least Privilege**: Default deny policies with explicit allow rules
 3. **Network Segmentation**: Each VM in its own /24 subnet
 4. **Stateful Inspection**: Connection tracking for return traffic
 5. **Atomic Configuration**: All nftables rules update together (no partial states)
+6. **DNS-Based Egress Control**: Allowlist filtering prevents unauthorized external access
 
 ### Operational Notes
 
@@ -551,6 +827,27 @@ journalctl -k | grep "FORWARD DROP"
 ssh 10.1.0.2 "ping -c 3 8.8.8.8"
 ```
 
+**Troubleshooting DNS filtering:**
+```bash
+# Check CoreDNS service status
+systemctl status coredns
+
+# View DNS query logs (allowed and denied)
+journalctl -u coredns -f
+
+# Test allowed domain resolution
+ssh 10.1.0.2 "nslookup github.com"
+
+# Test blocked domain (should return NXDOMAIN)
+ssh 10.1.0.2 "nslookup blocked-site.com"
+
+# Verify DNS DNAT rules
+nft list chain ip nat prerouting | grep "dport 53"
+
+# Check if DoT is blocked
+ssh 10.1.0.2 "timeout 3 nc -zv 1.1.1.1 853"
+```
+
 **Performance Considerations:**
 - TAP interfaces: ~10-40 Gbps throughput
 - nftables: Negligible overhead (<1% CPU)
@@ -562,6 +859,8 @@ ssh 10.1.0.2 "ping -c 3 8.8.8.8"
 ## References
 
 - **nftables wiki**: https://wiki.nftables.org/
+- **CoreDNS documentation**: https://coredns.io/manual/toc/
+- **CoreDNS plugins**: https://coredns.io/plugins/
 - **systemd-networkd**: https://www.freedesktop.org/software/systemd/man/systemd.network.html
 - **Linux bridge**: https://wiki.linuxfoundation.org/networking/bridge
 - **Tailscale subnet routes**: https://tailscale.com/kb/1019/subnets/
