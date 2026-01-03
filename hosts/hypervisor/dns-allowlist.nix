@@ -176,12 +176,25 @@ let
     "login.tailscale.com"
   ];
 
+  # MicroVM gateway IPs that CoreDNS should bind to
+  # These are the gateway addresses for each VM's bridge network
+  bindAddresses = [
+    "10.1.0.1"  # br-vm1
+    "10.2.0.1"  # br-vm2
+    "10.3.0.1"  # br-vm3
+    "10.4.0.1"  # br-vm4
+    "10.5.0.1"  # br-vm5
+  ];
+
+  bindDirective = "bind ${lib.concatStringsSep " " bindAddresses}";
+
   # Generate CoreDNS config with forward blocks for each allowed domain
   # and a catch-all block that returns NXDOMAIN
   generateCorefile = domains: let
     # Create a forward block for each domain
     forwardBlocks = lib.concatMapStringsSep "\n" (domain: ''
-      ${domain} {
+      ${domain}:53 {
+        ${bindDirective}
         forward . ${upstreamDNS}
         cache 300
         log
@@ -192,7 +205,8 @@ let
     ${forwardBlocks}
 
     # Catch-all: block everything else with NXDOMAIN
-    . {
+    .:53 {
+      ${bindDirective}
       template ANY ANY {
         rcode NXDOMAIN
       }
