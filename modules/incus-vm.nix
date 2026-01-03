@@ -73,8 +73,8 @@
     "net.ipv4.conf.all.forwarding" = 1;
   };
 
-  # Open firewall for Incus Web UI
-  networking.firewall.allowedTCPPorts = [ 8443 ];
+  # Open firewall for Incus Web UI and SSH
+  networking.firewall.allowedTCPPorts = [ 22 8443 ];
 
   # Trust the Incus bridge for container traffic
   networking.firewall.trustedInterfaces = [ "incusbr0" ];
