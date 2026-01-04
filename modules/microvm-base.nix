@@ -1,11 +1,16 @@
 # modules/microvm-base.nix
-# Base configuration shared by all MicroVMs
+# Base configuration shared by all MicroVM slots
 # Handles: disk volumes, TAP interface, network config, resource allocation
+#
+# Portable State Architecture:
+# - Slots are fixed network identities (slot1 = 10.1.0.2, slot2 = 10.2.0.2, etc.)
+# - States are portable data stored in ZFS datasets
+# - Volume paths reference state name, set via microvm.stateName option
 #
 # Storage Architecture:
 # - /dev/vda: squashfs with VM's Nix closure (read-only, built at deploy time)
-# - /dev/vdb: ext4 root filesystem (64GB, persistent)
-# - /dev/vdc: ext4 writable Nix store overlay (8GB, for nix-env installs)
+# - /dev/vdb: ext4 root filesystem (64GB, persistent) - from state dataset
+# - /dev/vdc: ext4 writable Nix store overlay (8GB) - from state dataset
 #
 # Nix Store:
 # - /nix/.ro-store: squashfs mount (read-only base)
@@ -17,20 +22,35 @@ let
   # Load network definitions
   networks = import ./networks.nix;
 
-  # Look up this VM's network config
-  vmNetwork = networks.networks.${config.microvm.network};
+  # Look up this slot's network config
+  slotNetwork = networks.networks.${config.microvm.network};
 
   # Load VM resource defaults
   vmResources = import ./vm-resources.nix { inherit lib; };
+
+  # Get the state name (defaults to slot name for backward compatibility)
+  stateName = config.microvm.stateName;
 in
 {
   imports = [ vmResources ];
 
-  # Option: which network this VM belongs to
+  # Option: which network slot this VM belongs to
   options.microvm.network = lib.mkOption {
     type = lib.types.str;
-    description = "Network name from networks.nix";
-    example = "vm1";
+    description = "Network/slot name from networks.nix (e.g., slot1, slot2)";
+    example = "slot1";
+  };
+
+  # Option: state name for this VM's persistent data
+  options.microvm.stateName = lib.mkOption {
+    type = lib.types.str;
+    default = config.networking.hostName;
+    description = ''
+      Name of the state dataset to use for this VM's persistent storage.
+      States are stored in /var/lib/microvms/states/<stateName>/
+      This allows different states to be mounted to different slots.
+    '';
+    example = "dev-environment";
   };
 
   # Option: allow access to AWS Instance Metadata Service (IMDS)
@@ -74,61 +94,65 @@ in
     # Disable systemd in initrd (simpler boot)
     boot.initrd.systemd.enable = false;
 
-    # Disk volumes
+    # Disk volumes - paths reference state dataset
     # Note: With storeOnDisk=true, squashfs is /dev/vda, volumes start at /dev/vdb
     microvm.volumes = [
       {
-        # Root filesystem - persistent ext4
-        image = "/var/lib/microvms/${config.networking.hostName}/data.img";
+        # Root filesystem - persistent ext4 from state dataset
+        image = "/var/lib/microvms/states/${stateName}/data.img";
         size = 65536;  # 64GB
         autoCreate = true;
         fsType = "ext4";
         mountPoint = "/";
-        label = "${config.networking.hostName}-root";
+        label = "${stateName}-root";
       }
       {
         # Writable Nix store overlay - for imperative installs
-        image = "/var/lib/microvms/${config.networking.hostName}/nix-overlay.img";
+        image = "/var/lib/microvms/states/${stateName}/nix-overlay.img";
         size = 8192;  # 8GB
         autoCreate = true;
         fsType = "ext4";
         mountPoint = "/nix/.rw-store";
-        label = "${config.networking.hostName}-nix-rw";
+        label = "${stateName}-nix-rw";
       }
     ];
 
-    # TAP network interface
+    # TAP network interface - named by slot for hypervisor bridge attachment
     microvm.interfaces = [{
       type = "tap";
       id = "vm-${config.networking.hostName}";
-      # Generate MAC from network name (vm1->01, vm2->02, etc)
-      mac = "02:00:00:00:00:0${lib.substring 2 1 config.microvm.network}";
+      # Generate MAC from slot number (slot1->01, slot2->02, etc)
+      mac = "02:00:00:00:00:0${networks.slotNumber config.microvm.network}";
     }];
 
     # Enable systemd-networkd for network config
     systemd.network.enable = true;
 
-    # Configure first ethernet interface with static IP
+    # Configure first ethernet interface with static IP based on slot
     systemd.network.networks."10-lan" = {
       matchConfig = {
         Type = "ether";
         Name = "!veth*";  # Exclude Docker veth interfaces
       };
       networkConfig = {
-        Address = "${vmNetwork.subnet}.2/24";
-        Gateway = "${vmNetwork.subnet}.1";
-        DNS = "${vmNetwork.subnet}.1";
+        Address = "${slotNetwork.subnet}.2/24";
+        Gateway = "${slotNetwork.subnet}.1";
+        DNS = "${slotNetwork.subnet}.1";
         DHCP = "no";
       };
       routes = lib.mkIf config.microvm.allowIMDS [
         {
           routeConfig = {
             Destination = "169.254.169.254/32";
-            Gateway = "${vmNetwork.subnet}.1";
+            Gateway = "${slotNetwork.subnet}.1";
           };
         }
       ];
     };
+
+    # Write slot and state info for runtime introspection
+    environment.etc."vm-slot".text = config.networking.hostName;
+    environment.etc."vm-state".text = stateName;
 
     # Basic system settings
     time.timeZone = "UTC";
