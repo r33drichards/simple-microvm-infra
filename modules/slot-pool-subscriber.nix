@@ -10,27 +10,34 @@ with lib;
 let
   cfg = config.services.slotPoolSubscriber;
 
-  # Create a Python environment with both scripts accessible
+  # Create a Python package with both the ZFS manager and subscriber
   slotPoolPackage = pkgs.stdenv.mkDerivation {
     name = "slot-pool-subscriber";
     src = ../scripts;
     
+    buildInputs = [ pkgs.python3 ];
+    
     installPhase = ''
+      mkdir -p $out/lib/slot-pool
       mkdir -p $out/bin
-      mkdir -p $out/lib
       
-      # Copy the ZFS manager module
-      cp ${../scripts/zfs_manager.py} $out/lib/zfs_manager.py
+      # Copy the ZFS manager module to the library directory
+      cp ${../scripts/zfs_manager.py} $out/lib/slot-pool/zfs_manager.py
       
-      # Create the main script with proper imports
-      cat > $out/bin/slot-pool-subscriber << SCRIPT
+      # Create a wrapper script that sets up Python path and runs the subscriber
+      cat > $out/bin/slot-pool-subscriber << 'EOF'
       #!${pkgs.python3}/bin/python3
       import sys
-      sys.path.insert(0, "$out/lib")
+      import os
       
-      SCRIPT
+      # Add our library directory to Python path
+      lib_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'lib', 'slot-pool')
+      sys.path.insert(0, lib_dir)
       
-      # Append the actual subscriber code (skip the shebang line)
+      # Now import and run the actual subscriber code
+      EOF
+      
+      # Append the subscriber code (without the shebang line)
       tail -n +2 ${../scripts/slot-pool-subscriber.py} >> $out/bin/slot-pool-subscriber
       
       chmod +x $out/bin/slot-pool-subscriber

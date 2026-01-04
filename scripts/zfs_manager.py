@@ -143,22 +143,19 @@ class ZFSManager:
         """
         List all snapshots under the base dataset.
         
+        Note: libzfs_core doesn't provide a list snapshots API,
+        so this always uses CLI regardless of backend.
+        
         Returns:
             List of ZFSSnapshot objects
         """
-        snapshots = []
-
-        if self.use_native:
-            # libzfs_core doesn't have a direct list snapshots API
-            # Fall back to CLI for this operation
-            pass
-
-        # Use CLI (works for both native and fallback)
+        # Use CLI (libzfs_core doesn't have a list snapshots API)
         result = self._run_command([
             "zfs", "list", "-H", "-t", "snapshot", "-o", "name",
             "-r", f"{self.pool}/{self.base_dataset}"
         ])
 
+        snapshots = []
         for line in result.stdout.strip().split('\n'):
             if not line:
                 continue
@@ -308,7 +305,9 @@ class ZFSManager:
         """
         full_name = f"{self.pool}/{self.base_dataset}/{dataset_name}"
 
-        if self.use_native:
+        if self.use_native and not recursive:
+            # libzfs_core.lzc_destroy only supports non-recursive destroy
+            # For recursive, we must use CLI
             try:
                 self.lzc.lzc_destroy(full_name.encode())
                 logger.info(f"Destroyed dataset {full_name} (native)")
@@ -316,7 +315,7 @@ class ZFSManager:
             except Exception as e:
                 logger.warning(f"Native destroy failed, falling back to CLI: {e}")
 
-        # CLI fallback
+        # CLI fallback (or for recursive destroys)
         cmd = ["zfs", "destroy"]
         if recursive:
             cmd.append("-r")
