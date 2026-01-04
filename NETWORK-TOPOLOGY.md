@@ -38,39 +38,39 @@ graph LR
         CoreDNS["CoreDNS<br/>127.0.0.1:53<br/>• Allowlist Filtering<br/>• Default-Deny Policy"]
 
         subgraph VMNetwork["VM Network Infrastructure"]
-            subgraph VM1Net["VM1 Network"]
-                br1["br-vm1<br/>10.1.0.1/24"]
-                tap1["vm-vm1<br/>(TAP)"]
+            subgraph Slot1Net["Slot1 Network"]
+                br1["br-slot1<br/>10.1.0.1/24"]
+                tap1["vm-slot1<br/>(TAP)"]
             end
 
-            subgraph VM2Net["VM2 Network"]
-                br2["br-vm2<br/>10.2.0.1/24"]
-                tap2["vm-vm2<br/>(TAP)"]
+            subgraph Slot2Net["Slot2 Network"]
+                br2["br-slot2<br/>10.2.0.1/24"]
+                tap2["vm-slot2<br/>(TAP)"]
             end
 
-            subgraph VM3Net["VM3 Network"]
-                br3["br-vm3<br/>10.3.0.1/24"]
-                tap3["vm-vm3<br/>(TAP)"]
+            subgraph Slot3Net["Slot3 Network"]
+                br3["br-slot3<br/>10.3.0.1/24"]
+                tap3["vm-slot3<br/>(TAP)"]
             end
 
-            subgraph VM4Net["VM4 Network"]
-                br4["br-vm4<br/>10.4.0.1/24"]
-                tap4["vm-vm4<br/>(TAP)"]
+            subgraph Slot4Net["Slot4 Network"]
+                br4["br-slot4<br/>10.4.0.1/24"]
+                tap4["vm-slot4<br/>(TAP)"]
             end
 
-            subgraph VM5Net["VM5 Network"]
-                br5["br-vm5<br/>10.5.0.1/24"]
-                tap5["vm-vm5<br/>(TAP)"]
+            subgraph Slot5Net["Slot5 Network"]
+                br5["br-slot5<br/>10.5.0.1/24"]
+                tap5["vm-slot5<br/>(TAP)"]
             end
         end
     end
 
-    subgraph VMs["Virtual Machines"]
-        VM1["VM1<br/>10.1.0.2/24<br/>(NixOS)"]
-        VM2["VM2<br/>10.2.0.2/24<br/>(NixOS)"]
-        VM3["VM3<br/>10.3.0.2/24<br/>(NixOS)"]
-        VM4["VM4<br/>10.4.0.2/24<br/>(NixOS)"]
-        VM5["VM5<br/>10.5.0.2/24<br/>(NixOS)"]
+    subgraph Slots["Slots (Fixed Network Identity)"]
+        Slot1["Slot1<br/>10.1.0.2/24<br/>(NixOS)"]
+        Slot2["Slot2<br/>10.2.0.2/24<br/>(NixOS)"]
+        Slot3["Slot3<br/>10.3.0.2/24<br/>(NixOS)"]
+        Slot4["Slot4<br/>10.4.0.2/24<br/>(NixOS)"]
+        Slot5["Slot5<br/>10.5.0.2/24<br/>(NixOS)"]
     end
 
     %% Remote to Internet
@@ -102,12 +102,12 @@ graph LR
     br4 --- tap4
     br5 --- tap5
 
-    %% TAPs to VMs (virtio-net)
-    tap1 -.virtio-net.-> VM1
-    tap2 -.virtio-net.-> VM2
-    tap3 -.virtio-net.-> VM3
-    tap4 -.virtio-net.-> VM4
-    tap5 -.virtio-net.-> VM5
+    %% TAPs to Slots (virtio-net)
+    tap1 -.virtio-net.-> Slot1
+    tap2 -.virtio-net.-> Slot2
+    tap3 -.virtio-net.-> Slot3
+    tap4 -.virtio-net.-> Slot4
+    tap5 -.virtio-net.-> Slot5
 
     style Remote fill:#f3e5f5
     style Internet fill:#e1f5ff
@@ -116,31 +116,31 @@ graph LR
     style nftables fill:#ffebee
     style CoreDNS fill:#e1f5fe
     style VMNetwork fill:#f5f5f5
-    style VM1Net fill:#e3f2fd
-    style VM2Net fill:#e8f5e9
-    style VM3Net fill:#fff3e0
-    style VM4Net fill:#fce4ec
-    style VM5Net fill:#f1f8e9
-    style VMs fill:#e8f5e9
+    style Slot1Net fill:#e3f2fd
+    style Slot2Net fill:#e8f5e9
+    style Slot3Net fill:#fff3e0
+    style Slot4Net fill:#fce4ec
+    style Slot5Net fill:#f1f8e9
+    style Slots fill:#e8f5e9
 ```
 
 ---
 
 ## Network Traffic Flows
 
-### Flow 1: VM to Internet
+### Flow 1: Slot to Internet
 
 ```mermaid
 sequenceDiagram
-    participant VM1 as VM1<br/>(10.1.0.2)
-    participant GW as br-vm1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
+    participant GW as br-slot1<br/>(10.1.0.1)
     participant NFT as nftables
     participant WAN as enP2p4s0<br/>(Public IP)
     participant Internet
 
-    VM1->>GW: TCP to 8.8.8.8:443<br/>src: 10.1.0.2:1234
+    Slot1->>GW: TCP to 8.8.8.8:443<br/>src: 10.1.0.2:1234
     GW->>NFT: Forward chain check
-    Note over NFT: Rule: iifname br-vm1<br/>oifname enP2p4s0<br/>ACCEPT ✅
+    Note over NFT: Rule: iifname br-slot1<br/>oifname enP2p4s0<br/>ACCEPT ✅
     NFT->>NFT: Postrouting NAT
     Note over NFT: Masquerade<br/>10.1.0.2 → Public IP
     NFT->>WAN: src: Public IP:1234<br/>dst: 8.8.8.8:443
@@ -150,19 +150,19 @@ sequenceDiagram
     Note over NFT: Connection tracking:<br/>established connection ✅
     NFT-->>NFT: Reverse NAT<br/>Public IP → 10.1.0.2
     NFT-->>GW: dst: 10.1.0.2:1234
-    GW-->>VM1: Response delivered
+    GW-->>Slot1: Response delivered
 ```
 
-### Flow 2: VM to AWS IMDS (Metadata Service)
+### Flow 2: Slot to AWS IMDS (Metadata Service)
 
 ```mermaid
 sequenceDiagram
-    participant VM1 as VM1<br/>(10.1.0.2)
-    participant GW as br-vm1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
+    participant GW as br-slot1<br/>(10.1.0.1)
     participant NFT as nftables
     participant IMDS as AWS IMDS<br/>(169.254.169.254)
 
-    VM1->>GW: GET http://169.254.169.254/latest/meta-data/<br/>src: 10.1.0.2:5678
+    Slot1->>GW: GET http://169.254.169.254/latest/meta-data/<br/>src: 10.1.0.2:5678
     GW->>NFT: Prerouting DNAT
     Note over NFT: Rule: ip saddr 10.0.0.0/8<br/>ip daddr 169.254.169.254<br/>DNAT to 169.254.169.254:80
     NFT->>NFT: Postrouting NAT
@@ -171,7 +171,7 @@ sequenceDiagram
     IMDS-->>NFT: Response with metadata
     NFT-->>NFT: Reverse NAT<br/>Hypervisor IP → 10.1.0.2
     NFT-->>GW: dst: 10.1.0.2:5678
-    GW-->>VM1: Metadata delivered
+    GW-->>Slot1: Metadata delivered
 ```
 
 ### Flow 3: Remote Access via Tailscale
@@ -181,54 +181,54 @@ sequenceDiagram
     participant Laptop as Your Laptop<br/>(100.y.y.y)
     participant TS as tailscale0<br/>(100.x.x.x)
     participant NFT as nftables
-    participant GW as br-vm1<br/>(10.1.0.1)
-    participant VM1 as VM1<br/>(10.1.0.2)
+    participant GW as br-slot1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
 
-    Note over Laptop,VM1: SSH to VM1 via Tailscale subnet route
+    Note over Laptop,Slot1: SSH to Slot1 via Tailscale subnet route
     Laptop->>TS: SSH to 10.1.0.2:22<br/>src: 100.y.y.y
     TS->>NFT: Forward chain check
-    Note over NFT: Rule: iifname tailscale0<br/>oifname br-vm1<br/>ACCEPT ✅
-    NFT->>GW: Forward to VM1
-    GW->>VM1: SSH connection
-    VM1-->>GW: SSH response
+    Note over NFT: Rule: iifname tailscale0<br/>oifname br-slot1<br/>ACCEPT ✅
+    NFT->>GW: Forward to Slot1
+    GW->>Slot1: SSH connection
+    Slot1-->>GW: SSH response
     GW-->>NFT: Return traffic
     Note over NFT: Connection tracking:<br/>established connection ✅
     NFT-->>TS: Forward response
     TS-->>Laptop: SSH session established
 ```
 
-### Flow 4: VM1 to VM2 (BLOCKED - Isolation)
+### Flow 4: Slot1 to Slot2 (BLOCKED - Isolation)
 
 ```mermaid
 sequenceDiagram
-    participant VM1 as VM1<br/>(10.1.0.2)
-    participant GW1 as br-vm1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
+    participant GW1 as br-slot1<br/>(10.1.0.1)
     participant NFT as nftables
-    participant GW2 as br-vm2<br/>(10.2.0.1)
-    participant VM2 as VM2<br/>(10.2.0.2)
+    participant GW2 as br-slot2<br/>(10.2.0.1)
+    participant Slot2 as Slot2<br/>(10.2.0.2)
 
-    VM1->>GW1: Ping 10.2.0.2<br/>src: 10.1.0.2
+    Slot1->>GW1: Ping 10.2.0.2<br/>src: 10.1.0.2
     GW1->>NFT: Forward chain check
-    Note over NFT: Rule: iifname br-vm1<br/>oifname br-vm2<br/>DROP ❌
+    Note over NFT: Rule: iifname br-slot1<br/>oifname br-slot2<br/>DROP ❌
     NFT->>NFT: Log: "FORWARD DROP"
     NFT--xGW2: Packet dropped
-    Note over VM1: Connection timeout<br/>(no response)
+    Note over Slot1: Connection timeout<br/>(no response)
 ```
 
 ### Flow 5: DNS Query (Allowed Domain)
 
 ```mermaid
 sequenceDiagram
-    participant VM1 as VM1<br/>(10.1.0.2)
-    participant GW as br-vm1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
+    participant GW as br-slot1<br/>(10.1.0.1)
     participant NFT as nftables
     participant DNS as CoreDNS<br/>(127.0.0.1:53)
     participant Upstream as Upstream DNS<br/>(1.1.1.1)
 
-    Note over VM1: nslookup github.com
-    VM1->>GW: DNS query: github.com<br/>src: 10.1.0.2:54321<br/>dst: 10.1.0.1:53
+    Note over Slot1: nslookup github.com
+    Slot1->>GW: DNS query: github.com<br/>src: 10.1.0.2:54321<br/>dst: 10.1.0.1:53
     GW->>NFT: Prerouting chain
-    Note over NFT: DNAT Rule:<br/>iifname br-vm* udp dport 53<br/>dnat to 127.0.0.1:53
+    Note over NFT: DNAT Rule:<br/>iifname br-slot* udp dport 53<br/>dnat to 127.0.0.1:53
     NFT->>DNS: DNS query redirected<br/>dst: 127.0.0.1:53
     Note over DNS: Domain "github.com"<br/>matches allowlist ✅
     DNS->>Upstream: Forward query to 1.1.1.1
@@ -236,52 +236,52 @@ sequenceDiagram
     DNS-->>NFT: DNS response
     Note over NFT: Connection tracking:<br/>reverse NAT
     NFT-->>GW: Response to 10.1.0.2
-    GW-->>VM1: github.com = 140.82.112.3 ✅
+    GW-->>Slot1: github.com = 140.82.112.3 ✅
 ```
 
 ### Flow 6: DNS Query (Blocked Domain)
 
 ```mermaid
 sequenceDiagram
-    participant VM1 as VM1<br/>(10.1.0.2)
-    participant GW as br-vm1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
+    participant GW as br-slot1<br/>(10.1.0.1)
     participant NFT as nftables
     participant DNS as CoreDNS<br/>(127.0.0.1:53)
 
-    Note over VM1: nslookup malicious-site.com
-    VM1->>GW: DNS query: malicious-site.com<br/>src: 10.1.0.2:54322<br/>dst: 10.1.0.1:53
+    Note over Slot1: nslookup malicious-site.com
+    Slot1->>GW: DNS query: malicious-site.com<br/>src: 10.1.0.2:54322<br/>dst: 10.1.0.1:53
     GW->>NFT: Prerouting chain
-    Note over NFT: DNAT Rule:<br/>iifname br-vm* udp dport 53<br/>dnat to 127.0.0.1:53
+    Note over NFT: DNAT Rule:<br/>iifname br-slot* udp dport 53<br/>dnat to 127.0.0.1:53
     NFT->>DNS: DNS query redirected
     Note over DNS: Domain "malicious-site.com"<br/>NOT in allowlist ❌
     DNS->>DNS: Log: denial
     DNS-->>NFT: NXDOMAIN response
     NFT-->>GW: Response to 10.1.0.2
-    GW-->>VM1: NXDOMAIN (domain not found) ❌
-    Note over VM1: Resolution failed<br/>(cannot connect)
+    GW-->>Slot1: NXDOMAIN (domain not found) ❌
+    Note over Slot1: Resolution failed<br/>(cannot connect)
 ```
 
 ---
 
 ## DNS-Based Allowlist Filtering
 
-The infrastructure implements DNS-based egress filtering using CoreDNS. This provides a default-deny policy where VMs can only resolve domains on an explicit allowlist.
+The infrastructure implements DNS-based egress filtering using CoreDNS. This provides a default-deny policy where slots can only resolve domains on an explicit allowlist.
 
 ### Architecture Overview
 
 ```mermaid
 graph TB
-    subgraph VMs["Virtual Machines"]
-        VM1["VM1<br/>DNS: 10.1.0.1"]
-        VM2["VM2<br/>DNS: 10.2.0.1"]
-        VM3["VM3<br/>DNS: 10.3.0.1"]
+    subgraph Slots["Slots (Fixed Network Identity)"]
+        Slot1["Slot1<br/>DNS: 10.1.0.1"]
+        Slot2["Slot2<br/>DNS: 10.2.0.1"]
+        Slot3["Slot3<br/>DNS: 10.3.0.1"]
     end
 
     subgraph Hypervisor["Hypervisor"]
-        subgraph Bridges["VM Bridges"]
-            BR1["br-vm1<br/>10.1.0.1"]
-            BR2["br-vm2<br/>10.2.0.1"]
-            BR3["br-vm3<br/>10.3.0.1"]
+        subgraph Bridges["Slot Bridges"]
+            BR1["br-slot1<br/>10.1.0.1"]
+            BR2["br-slot2<br/>10.2.0.1"]
+            BR3["br-slot3<br/>10.3.0.1"]
         end
 
         NFT["nftables<br/>DNAT port 53<br/>→ 127.0.0.1:53"]
@@ -298,9 +298,9 @@ graph TB
         Google["Google<br/>8.8.8.8"]
     end
 
-    VM1 -->|DNS query| BR1
-    VM2 -->|DNS query| BR2
-    VM3 -->|DNS query| BR3
+    Slot1 -->|DNS query| BR1
+    Slot2 -->|DNS query| BR2
+    Slot3 -->|DNS query| BR3
 
     BR1 --> NFT
     BR2 --> NFT
@@ -313,7 +313,7 @@ graph TB
     Forward --> CF
     Forward --> Google
 
-    style VMs fill:#e8f5e9
+    style Slots fill:#e8f5e9
     style Hypervisor fill:#fff4e1
     style CoreDNS fill:#e1f5fe
     style Upstream fill:#f3e5f5
@@ -322,8 +322,8 @@ graph TB
 
 ### How DNS Filtering Works
 
-1. **VM Configuration**: Each VM is configured to use its gateway IP (10.x.0.1) as the DNS resolver
-2. **Transparent Interception**: nftables DNAT rules intercept ALL port 53 traffic from VM bridges
+1. **Slot Configuration**: Each slot is configured to use its gateway IP (10.x.0.1) as the DNS resolver
+2. **Transparent Interception**: nftables DNAT rules intercept ALL port 53 traffic from slot bridges
 3. **Redirection to localhost**: DNS queries are redirected to CoreDNS running on 127.0.0.1:53
 4. **Allowlist Check**: CoreDNS checks if the domain is in the allowlist
 5. **Forward or Deny**: Allowed domains are forwarded to upstream; blocked domains get NXDOMAIN
@@ -335,16 +335,16 @@ table ip nat {
     chain prerouting {
         type nat hook prerouting priority dstnat;
 
-        # Redirect all DNS traffic from VMs to CoreDNS
-        iifname { "br-vm1", "br-vm2", "br-vm3", "br-vm4", "br-vm5" } udp dport 53 dnat to 127.0.0.1:53
-        iifname { "br-vm1", "br-vm2", "br-vm3", "br-vm4", "br-vm5" } tcp dport 53 dnat to 127.0.0.1:53
+        # Redirect all DNS traffic from slots to CoreDNS
+        iifname { "br-slot1", "br-slot2", "br-slot3", "br-slot4", "br-slot5" } udp dport 53 dnat to 127.0.0.1:53
+        iifname { "br-slot1", "br-slot2", "br-slot3", "br-slot4", "br-slot5" } tcp dport 53 dnat to 127.0.0.1:53
     }
 }
 
 table inet filter {
     chain forward {
         # Block DNS-over-TLS to prevent bypass
-        iifname { "br-vm1", "br-vm2", "br-vm3", "br-vm4", "br-vm5" } tcp dport 853 drop
+        iifname { "br-slot1", "br-slot2", "br-slot3", "br-slot4", "br-slot5" } tcp dport 853 drop
     }
 }
 ```
@@ -401,12 +401,12 @@ The allowlist includes domains organized by category:
 
 ```mermaid
 graph LR
-    subgraph VM["VM (10.x.0.2)"]
+    subgraph Slot["Slot (10.x.0.2)"]
         App["Application"]
     end
 
     subgraph Gateway["Gateway (10.x.0.1)"]
-        Bridge["br-vmX"]
+        Bridge["br-slotX"]
     end
 
     subgraph Prerouting["nftables Prerouting"]
@@ -435,19 +435,20 @@ graph LR
 
     style Block fill:#ffcdd2
     style Forward fill:#c8e6c9
+    style Slot fill:#e8f5e9
 ```
 
 ### Security Benefits
 
 1. **Default-Deny Policy**: Only explicitly allowed domains can be resolved
-2. **Transparent Enforcement**: VMs cannot bypass filtering - all DNS is intercepted at network layer
+2. **Transparent Enforcement**: Slots cannot bypass filtering - all DNS is intercepted at network layer
 3. **DoT Prevention**: DNS-over-TLS is blocked to prevent encrypted DNS bypass
 4. **Audit Logging**: All DNS queries (allowed and denied) are logged
 5. **Subdomain Coverage**: Allowing `github.com` automatically covers `*.github.com`
 
 ### Bypass Prevention
 
-The filtering cannot be bypassed by VMs because:
+The filtering cannot be bypassed by slots because:
 
 | Bypass Attempt | Prevention |
 |----------------|------------|
@@ -465,7 +466,7 @@ systemctl status coredns
 # View DNS query logs
 journalctl -u coredns -f
 
-# Test DNS resolution from VM
+# Test DNS resolution from slot
 ssh 10.1.0.2 "nslookup github.com"      # Should resolve
 ssh 10.1.0.2 "nslookup evil-site.com"   # Should fail with NXDOMAIN
 
@@ -504,10 +505,10 @@ graph TB
     subgraph Forward["FORWARD Chain (through Hypervisor)"]
         FWD_POLICY["Policy: DROP"]
         FWD_ESTAB{Established/<br/>Related?}
-        FWD_ISOLATE{Inter-VM?<br/>br-vmX → br-vmY}
-        FWD_TS_VM{Tailscale<br/>→ VM?}
-        FWD_VM_WAN{VM → Internet?}
-        FWD_WAN_VM{Internet → VM?}
+        FWD_ISOLATE{Inter-Slot?<br/>br-slotX → br-slotY}
+        FWD_TS_VM{Tailscale<br/>→ Slot?}
+        FWD_VM_WAN{Slot → Internet?}
+        FWD_WAN_VM{Internet → Slot?}
         FWD_LOG[Log & Drop]
         FWD_ACCEPT[ACCEPT]
         FWD_DROP[DROP]
@@ -585,66 +586,66 @@ graph TB
 
 ## Isolation Mechanism
 
-### How VM Isolation Works
+### How Slot Isolation Works
 
 The `generateIsolationRules` function creates a rule matrix:
 
 ```
-Source → Target      br-vm1  br-vm2  br-vm3  br-vm4  br-vm5
-─────────────────────────────────────────────────────────────
-br-vm1                 -      DROP    DROP    DROP    DROP
-br-vm2               DROP      -      DROP    DROP    DROP
-br-vm3               DROP    DROP      -      DROP    DROP
-br-vm4               DROP    DROP    DROP      -      DROP
-br-vm5               DROP    DROP    DROP    DROP      -
+Source → Target      br-slot1  br-slot2  br-slot3  br-slot4  br-slot5
+──────────────────────────────────────────────────────────────────────
+br-slot1                 -        DROP      DROP      DROP      DROP
+br-slot2               DROP         -       DROP      DROP      DROP
+br-slot3               DROP       DROP        -       DROP      DROP
+br-slot4               DROP       DROP      DROP        -       DROP
+br-slot5               DROP       DROP      DROP      DROP        -
 ```
 
 **Generated nftables rules:**
 ```nft
-iifname "br-vm1" oifname "br-vm2" drop
-iifname "br-vm1" oifname "br-vm3" drop
-iifname "br-vm1" oifname "br-vm4" drop
-iifname "br-vm1" oifname "br-vm5" drop
-iifname "br-vm2" oifname "br-vm1" drop
-iifname "br-vm2" oifname "br-vm3" drop
+iifname "br-slot1" oifname "br-slot2" drop
+iifname "br-slot1" oifname "br-slot3" drop
+iifname "br-slot1" oifname "br-slot4" drop
+iifname "br-slot1" oifname "br-slot5" drop
+iifname "br-slot2" oifname "br-slot1" drop
+iifname "br-slot2" oifname "br-slot3" drop
 # ... (continues for all combinations)
 ```
 
-**Result:** VMs cannot communicate with each other at Layer 2 or Layer 3. All inter-VM traffic is dropped at the hypervisor's forward chain.
+**Result:** Slots cannot communicate with each other at Layer 2 or Layer 3. All inter-slot traffic is dropped at the hypervisor's forward chain.
 
 ### Isolation Benefits
 
 ```mermaid
 graph LR
-    subgraph VM1_Net["VM1 Network (10.1.0.0/24)"]
-        VM1["VM1<br/>10.1.0.2"]
+    subgraph Slot1_Net["Slot1 Network (10.1.0.0/24)"]
+        Slot1["Slot1<br/>10.1.0.2"]
     end
 
-    subgraph VM2_Net["VM2 Network (10.2.0.0/24)"]
-        VM2["VM2<br/>10.2.0.2"]
+    subgraph Slot2_Net["Slot2 Network (10.2.0.0/24)"]
+        Slot2["Slot2<br/>10.2.0.2"]
     end
 
-    subgraph VM3_Net["VM3 Network (10.3.0.0/24)"]
-        VM3["VM3<br/>10.3.0.2"]
+    subgraph Slot3_Net["Slot3 Network (10.3.0.0/24)"]
+        Slot3["Slot3<br/>10.3.0.2"]
     end
 
     Hypervisor["Hypervisor<br/>(nftables isolation)"]
 
-    VM1 -.->|"❌ BLOCKED"| Hypervisor
-    Hypervisor -.->|"❌ BLOCKED"| VM2
-    VM1 -.->|"❌ BLOCKED"| VM3
-    VM2 -.->|"❌ BLOCKED"| VM3
+    Slot1 -.->|"❌ BLOCKED"| Hypervisor
+    Hypervisor -.->|"❌ BLOCKED"| Slot2
+    Slot1 -.->|"❌ BLOCKED"| Slot3
+    Slot2 -.->|"❌ BLOCKED"| Slot3
 
-    style VM1_Net fill:#ffebee
-    style VM2_Net fill:#e8f5e9
-    style VM3_Net fill:#e3f2fd
+    style Slot1_Net fill:#ffebee
+    style Slot2_Net fill:#e8f5e9
+    style Slot3_Net fill:#e3f2fd
     style Hypervisor fill:#fff3e0
 ```
 
 **Security Benefits:**
-- **Attack Surface Reduction**: Compromised VM cannot pivot to other VMs
-- **Traffic Isolation**: Each VM's traffic is completely isolated
-- **Independent Policies**: Can apply different security policies per VM
+- **Attack Surface Reduction**: Compromised slot cannot pivot to other slots
+- **Traffic Isolation**: Each slot's traffic is completely isolated
+- **Independent Policies**: Can apply different security policies per slot
 - **Compliance**: Meets multi-tenant isolation requirements
 
 ---
@@ -653,25 +654,25 @@ graph LR
 
 ### Address Ranges
 
-| Network | Subnet | Bridge IP | VM IP | Gateway | Broadcast | Usable IPs |
-|---------|--------|-----------|-------|---------|-----------|------------|
-| VM1 | 10.1.0.0/24 | 10.1.0.1 | 10.1.0.2 | 10.1.0.1 | 10.1.0.255 | 10.1.0.2-254 |
-| VM2 | 10.2.0.0/24 | 10.2.0.1 | 10.2.0.2 | 10.2.0.1 | 10.2.0.255 | 10.2.0.2-254 |
-| VM3 | 10.3.0.0/24 | 10.3.0.1 | 10.3.0.2 | 10.3.0.1 | 10.3.0.255 | 10.3.0.2-254 |
-| VM4 | 10.4.0.0/24 | 10.4.0.1 | 10.4.0.2 | 10.4.0.1 | 10.4.0.255 | 10.4.0.2-254 |
-| VM5 | 10.5.0.0/24 | 10.5.0.1 | 10.5.0.2 | 10.5.0.1 | 10.5.0.255 | 10.5.0.2-254 |
+| Network | Subnet | Bridge IP | Slot IP | Gateway | Broadcast | Usable IPs |
+|---------|--------|-----------|---------|---------|-----------|------------|
+| Slot1 | 10.1.0.0/24 | 10.1.0.1 | 10.1.0.2 | 10.1.0.1 | 10.1.0.255 | 10.1.0.2-254 |
+| Slot2 | 10.2.0.0/24 | 10.2.0.1 | 10.2.0.2 | 10.2.0.1 | 10.2.0.255 | 10.2.0.2-254 |
+| Slot3 | 10.3.0.0/24 | 10.3.0.1 | 10.3.0.2 | 10.3.0.1 | 10.3.0.255 | 10.3.0.2-254 |
+| Slot4 | 10.4.0.0/24 | 10.4.0.1 | 10.4.0.2 | 10.4.0.1 | 10.4.0.255 | 10.4.0.2-254 |
+| Slot5 | 10.5.0.0/24 | 10.5.0.1 | 10.5.0.2 | 10.5.0.1 | 10.5.0.255 | 10.5.0.2-254 |
 
 ### Reserved Addresses
 
-- **10.0.0.0/8**: Entire private range used for VMs
+- **10.0.0.0/8**: Entire private range used for slots
 - **169.254.169.254**: AWS Instance Metadata Service (IMDS)
 - **100.x.x.x/8**: Tailscale CGNAT range (VPN)
 
 ### Static IP Configuration
 
-VMs use static IP configuration (no DHCP):
+Slots use static IP configuration (no DHCP):
 
-**In VM (systemd-networkd config):**
+**In slot (systemd-networkd config):**
 ```nix
 systemd.network.networks."10-lan" = {
   matchConfig.Type = "ether";
@@ -692,22 +693,22 @@ systemd.network.networks."10-lan" = {
 
 ## Traffic Flow Examples
 
-### Example 1: VM1 Downloads Package from Internet
+### Example 1: Slot1 Downloads Package from Internet
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant VM1 as VM1<br/>(10.1.0.2)
-    participant BR1 as br-vm1<br/>(10.1.0.1)
+    participant Slot1 as Slot1<br/>(10.1.0.2)
+    participant BR1 as br-slot1<br/>(10.1.0.1)
     participant NFT as nftables
     participant WAN as enP2p4s0
     participant Server as archive.ubuntu.com
 
-    Note over VM1: curl http://archive.ubuntu.com/package.deb
-    VM1->>BR1: TCP SYN<br/>src: 10.1.0.2:4567<br/>dst: archive.ubuntu.com:80
-    BR1->>NFT: Forward chain: iifname br-vm1
+    Note over Slot1: curl http://archive.ubuntu.com/package.deb
+    Slot1->>BR1: TCP SYN<br/>src: 10.1.0.2:4567<br/>dst: archive.ubuntu.com:80
+    BR1->>NFT: Forward chain: iifname br-slot1
     NFT->>NFT: Check isolation rules (pass)
-    NFT->>NFT: Check VM→WAN rule (ACCEPT)
+    NFT->>NFT: Check Slot→WAN rule (ACCEPT)
     NFT->>NFT: Postrouting: Masquerade<br/>10.1.0.2 → Public IP
     NFT->>WAN: src: Public IP:4567<br/>dst: archive.ubuntu.com:80
     WAN->>Server: HTTP GET /package.deb
@@ -715,10 +716,10 @@ sequenceDiagram
     WAN-->>NFT: dst: Public IP:4567
     NFT-->>NFT: Connection tracking: match<br/>Reverse NAT: Public IP → 10.1.0.2
     NFT-->>BR1: dst: 10.1.0.2:4567
-    BR1-->>VM1: Package downloaded ✅
+    BR1-->>Slot1: Package downloaded ✅
 ```
 
-### Example 2: SSH from Laptop to VM3 via Tailscale
+### Example 2: SSH from Laptop to Slot3 via Tailscale
 
 ```mermaid
 sequenceDiagram
@@ -727,56 +728,56 @@ sequenceDiagram
     participant TS as Tailscale Network
     participant HV_TS as tailscale0<br/>(100.100.100.100)
     participant NFT as nftables
-    participant BR3 as br-vm3<br/>(10.3.0.1)
-    participant VM3 as VM3<br/>(10.3.0.2)
+    participant BR3 as br-slot3<br/>(10.3.0.1)
+    participant Slot3 as Slot3<br/>(10.3.0.2)
 
     Note over Laptop: ssh 10.3.0.2
     Laptop->>TS: Encrypted WireGuard tunnel
     TS->>HV_TS: Route via subnet routes
-    HV_TS->>NFT: Forward chain: iifname tailscale0<br/>oifname br-vm3
-    NFT->>NFT: Check tailscale→VM rule (ACCEPT)
+    HV_TS->>NFT: Forward chain: iifname tailscale0<br/>oifname br-slot3
+    NFT->>NFT: Check tailscale→Slot rule (ACCEPT)
     NFT->>BR3: Forward to 10.3.0.2:22
-    BR3->>VM3: SSH handshake
-    VM3-->>BR3: SSH response
+    BR3->>Slot3: SSH handshake
+    Slot3-->>BR3: SSH response
     BR3-->>NFT: Connection tracking: established
     NFT-->>HV_TS: Return traffic
     HV_TS-->>TS: WireGuard tunnel
     TS-->>Laptop: SSH session established ✅
 ```
 
-### Example 3: VM2 Tries to Access VM4 (Blocked)
+### Example 3: Slot2 Tries to Access Slot4 (Blocked)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant VM2 as VM2<br/>(10.2.0.2)
-    participant BR2 as br-vm2<br/>(10.2.0.1)
+    participant Slot2 as Slot2<br/>(10.2.0.2)
+    participant BR2 as br-slot2<br/>(10.2.0.1)
     participant NFT as nftables
-    participant BR4 as br-vm4<br/>(10.4.0.1)
-    participant VM4 as VM4<br/>(10.4.0.2)
+    participant BR4 as br-slot4<br/>(10.4.0.1)
+    participant Slot4 as Slot4<br/>(10.4.0.2)
 
-    Note over VM2: ping 10.4.0.2
-    VM2->>BR2: ICMP Echo Request<br/>src: 10.2.0.2<br/>dst: 10.4.0.2
-    BR2->>NFT: Forward chain: iifname br-vm2<br/>oifname br-vm4
-    NFT->>NFT: Match isolation rule:<br/>iifname "br-vm2" oifname "br-vm4" drop
-    NFT->>NFT: Log: "FORWARD DROP: br-vm2→br-vm4"
+    Note over Slot2: ping 10.4.0.2
+    Slot2->>BR2: ICMP Echo Request<br/>src: 10.2.0.2<br/>dst: 10.4.0.2
+    BR2->>NFT: Forward chain: iifname br-slot2<br/>oifname br-slot4
+    NFT->>NFT: Match isolation rule:<br/>iifname "br-slot2" oifname "br-slot4" drop
+    NFT->>NFT: Log: "FORWARD DROP: br-slot2→br-slot4"
     Note over NFT: Packet dropped ❌
-    Note over VM2: ping timeout<br/>(no response received)
+    Note over Slot2: ping timeout<br/>(no response received)
 ```
 
-### Example 4: VM5 Accesses AWS IMDS
+### Example 4: Slot5 Accesses AWS IMDS
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant VM5 as VM5<br/>(10.5.0.2)
-    participant BR5 as br-vm5<br/>(10.5.0.1)
+    participant Slot5 as Slot5<br/>(10.5.0.2)
+    participant BR5 as br-slot5<br/>(10.5.0.1)
     participant NFT_PRE as nftables<br/>(Prerouting)
     participant NFT_POST as nftables<br/>(Postrouting)
     participant IMDS as AWS IMDS<br/>(169.254.169.254)
 
-    Note over VM5: curl http://169.254.169.254/latest/meta-data/instance-id
-    VM5->>BR5: HTTP GET<br/>src: 10.5.0.2:8888<br/>dst: 169.254.169.254:80
+    Note over Slot5: curl http://169.254.169.254/latest/meta-data/instance-id
+    Slot5->>BR5: HTTP GET<br/>src: 10.5.0.2:8888<br/>dst: 169.254.169.254:80
     BR5->>NFT_PRE: Prerouting chain
     NFT_PRE->>NFT_PRE: Match: ip saddr 10.0.0.0/8<br/>ip daddr 169.254.169.254
     NFT_PRE->>NFT_PRE: DNAT: keep dst as 169.254.169.254
@@ -786,7 +787,7 @@ sequenceDiagram
     IMDS-->>NFT_POST: Instance ID response
     NFT_POST-->>NFT_POST: Reverse NAT:<br/>Hypervisor IP → 10.5.0.2
     NFT_POST-->>BR5: dst: 10.5.0.2:8888
-    BR5-->>VM5: Instance metadata ✅
+    BR5-->>Slot5: Instance metadata ✅
 ```
 
 ---
@@ -797,14 +798,15 @@ sequenceDiagram
 
 1. **Defense in Depth**: Multiple layers of isolation (bridges, nftables, DNS filtering, connection tracking)
 2. **Least Privilege**: Default deny policies with explicit allow rules
-3. **Network Segmentation**: Each VM in its own /24 subnet
+3. **Network Segmentation**: Each slot in its own /24 subnet
 4. **Stateful Inspection**: Connection tracking for return traffic
 5. **Atomic Configuration**: All nftables rules update together (no partial states)
 6. **DNS-Based Egress Control**: Allowlist filtering prevents unauthorized external access
+7. **Portable State**: States can be snapshotted and migrated between slots
 
 ### Operational Notes
 
-**Adding a new VM:**
+**Adding a new slot:**
 1. Add network definition to `modules/networks.nix`
 2. Configuration automatically generates bridge, TAP, isolation rules
 3. No manual firewall rule updates needed
@@ -815,7 +817,7 @@ sequenceDiagram
 nft list ruleset
 
 # Monitor traffic on bridge
-tcpdump -i br-vm1 -n
+tcpdump -i br-slot1 -n
 
 # Check NAT translations
 nft list table ip nat
@@ -823,7 +825,7 @@ nft list table ip nat
 # View dropped packets
 journalctl -k | grep "FORWARD DROP"
 
-# Test connectivity from VM
+# Test connectivity from slot
 ssh 10.1.0.2 "ping -c 3 8.8.8.8"
 ```
 

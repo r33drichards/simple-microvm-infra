@@ -1,128 +1,137 @@
-# VM Customization Guide
+# Slot Customization Guide
 
-This guide shows how to customize VMs in this infrastructure.
+This guide shows how to customize slots in this infrastructure.
 
-## Basic VM Definition
+## Architecture Overview
 
-VMs are defined in `flake.nix` in the `vms` attrset:
+Slots use a **minimal bootstrap + user customization** model:
 
-```nix
-vms = {
-  vm1 = { };
-  vm2 = { };
-  vm3 = { };
-};
+```
+Bootstrap (read-only squashfs):     Your Customizations (in data.img):
+├── kernel + initrd                 ├── Root filesystem (/)
+├── systemd                         ├── Home directories (/home)
+├── openssh                         ├── Nix overlay (/nix/.rw-store)
+├── networkd                        └── All packages via nixos-rebuild
+├── nix
+└── nodejs
 ```
 
-## Adding Custom Packages
+## Customizing a Slot
 
-To add packages to a specific VM:
+### Option 1: nixos-rebuild Inside the Slot (Recommended)
 
-```nix
-vms = {
-  vm1 = {
-    packages = with pkgs; [ git docker python3 ];
-  };
-  vm2 = { };
-};
+The recommended way to customize a slot is from inside the slot itself:
+
+```bash
+# SSH into the slot
+ssh root@10.1.0.2
+
+# Edit the configuration
+nano /etc/nixos/configuration.nix
+
+# Apply changes
+nixos-rebuild switch
 ```
 
-## Adding Custom Modules
-
-Create a custom module file and reference it:
+Example configuration changes:
 
 ```nix
-# modules/custom-vm-config.nix
+# /etc/nixos/configuration.nix
 { config, pkgs, ... }:
 {
+  # Add packages
+  environment.systemPackages = with pkgs; [
+    git
+    docker
+    python3
+    neovim
+  ];
+
+  # Enable services
   services.postgresql.enable = true;
 
+  # Add users
   users.users.developer = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
   };
+
+  # Configure Docker
+  virtualisation.docker.enable = true;
 }
 ```
 
-Then in `flake.nix`:
+### Option 2: Configure Resources at Slot Definition
+
+Resource overrides (CPU/memory) are defined in `flake.nix`:
 
 ```nix
-vms = {
-  vm1 = {
-    modules = [ ./modules/custom-vm-config.nix ];
-  };
-  vm2 = { };
+slots = {
+  slot1 = {};  # Uses defaults: 1 vCPU, 1GB RAM
+  slot2 = {};
+  slot3 = {};
+  slot4 = { config = { microvm.mem = 4096; microvm.vcpu = 2; }; };  # Extra resources
+  slot5 = {};
 };
 ```
 
-## Overriding Resource Allocation
+## State Management
 
-To give a VM more CPU/memory than the defaults:
+Customizations are stored in the slot's state (data.img), which can be:
 
-```nix
-vms = {
-  vm1 = {
-    modules = [{
-      microvm.vcpu = 8;
-      microvm.mem = 16384;  # 16GB
-    }];
-  };
-  vm2 = { };  # Uses defaults: 3 CPUs, 6GB RAM
-};
+### Snapshotted
+
+```bash
+# Create a snapshot before major changes
+vm-state snapshot slot1 before-update
+
+# Make changes inside the slot
+ssh root@10.1.0.2 "nixos-rebuild switch"
+
+# If something breaks, restore from snapshot
+vm-state restore before-update recovered-state
+vm-state migrate recovered-state slot1
 ```
 
-## Complete Example
+### Cloned
 
-```nix
-vms = {
-  vm1 = {
-    # Add extra packages
-    packages = with pkgs; [ git docker python3 nodejs ];
+```bash
+# Clone an existing customized slot's state
+vm-state clone slot1 my-dev-env
 
-    # Add custom configuration
-    modules = [
-      ./modules/database-config.nix
-      {
-        # Override resources
-        microvm.vcpu = 4;
-        microvm.mem = 8192;
-
-        # Enable services
-        services.postgresql.enable = true;
-      }
-    ];
-  };
-
-  vm2 = {
-    # Minimal VM with just defaults
-  };
-
-  vm3 = {
-    # Custom packages only
-    packages = with pkgs; [ rustc cargo ];
-  };
-};
+# Run the clone on another slot
+vm-state migrate my-dev-env slot3
 ```
 
-## Adding a New VM
+### Migrated
 
-To add a new VM:
+```bash
+# Move a state to a different slot (different IP)
+vm-state migrate my-dev-env slot2
 
-1. Add it to the `vms` attrset in `flake.nix`:
+# The state now runs on slot2 (10.2.0.2)
+ssh root@10.2.0.2
+```
+
+## Adding a New Slot
+
+To add a new slot:
+
+1. Add it to the `slots` attrset in `flake.nix`:
    ```nix
-   vms = {
-     vm1 = { };
-     vm2 = { };
-     vm6 = { };  # New VM
+   slots = {
+     slot1 = {};
+     slot2 = {};
+     slot6 = {};  # New slot
    };
    ```
 
 2. Add the network definition in `modules/networks.nix`:
    ```nix
    networks = {
-     vm1 = { subnet = "10.1.0"; bridge = "br-vm1"; };
-     vm2 = { subnet = "10.2.0"; bridge = "br-vm2"; };
-     vm6 = { subnet = "10.6.0"; bridge = "br-vm6"; };
+     slot1 = { subnet = "10.1.0"; bridge = "br-slot1"; };
+     slot2 = { subnet = "10.2.0"; bridge = "br-slot2"; };
+     slot6 = { subnet = "10.6.0"; bridge = "br-slot6"; };
    };
    ```
 
@@ -131,3 +140,93 @@ That's it! The hypervisor network configuration will automatically:
 - Assign the gateway IP
 - Add NAT rules
 - Configure firewall isolation
+
+## Common Customization Patterns
+
+### Development Environment
+
+```nix
+{ config, pkgs, ... }:
+{
+  environment.systemPackages = with pkgs; [
+    git neovim tmux
+    nodejs python3 rustc cargo
+    docker-compose
+  ];
+
+  virtualisation.docker.enable = true;
+
+  services.postgresql = {
+    enable = true;
+    package = pkgs.postgresql_15;
+  };
+}
+```
+
+### Web Server
+
+```nix
+{ config, pkgs, ... }:
+{
+  services.nginx = {
+    enable = true;
+    virtualHosts."example.com" = {
+      root = "/var/www/example";
+    };
+  };
+
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
+}
+```
+
+### Database Server
+
+```nix
+{ config, pkgs, ... }:
+{
+  services.postgresql = {
+    enable = true;
+    enableTCPIP = true;
+    authentication = ''
+      host all all 10.0.0.0/8 md5
+    '';
+  };
+
+  networking.firewall.allowedTCPPorts = [ 5432 ];
+}
+```
+
+## Best Practices
+
+1. **Snapshot before major changes**: Always create a snapshot before `nixos-rebuild switch` with significant changes
+
+2. **Use states for different environments**: Clone states to create dev, staging, production environments
+
+3. **Keep bootstrap minimal**: Don't modify `microvm-base.nix` unless necessary; customize via nixos-rebuild
+
+4. **Test on a spare slot**: Clone to a spare slot, test changes, then migrate back if successful
+
+## Workflow Example
+
+```bash
+# 1. Create a snapshot of current slot1 state
+vm-state snapshot slot1 baseline
+
+# 2. Clone to slot3 for testing
+vm-state clone slot1 test-env
+vm-state migrate test-env slot3
+
+# 3. Make changes in slot3
+ssh root@10.3.0.2
+nixos-rebuild switch  # apply changes
+
+# 4. If changes work, migrate back to slot1
+vm-state snapshot slot3 new-config
+vm-state clone slot3 slot1-new
+systemctl stop microvm@slot1
+vm-state assign slot1 slot1-new
+systemctl start microvm@slot1
+
+# 5. Clean up test environment
+vm-state delete test-env
+```
