@@ -2,6 +2,7 @@
 
 #include <libzfs.h>
 #include <nlohmann/json.hpp>
+#include <systemd/sd-bus.h>
 
 #include <fstream>
 #include <array>
@@ -54,6 +55,147 @@ std::string slot_ip(Slot slot) {
 std::vector<Slot> all_slots() {
     return {Slot::Slot1, Slot::Slot2, Slot::Slot3, Slot::Slot4, Slot::Slot5};
 }
+
+// RAII wrapper for sd_bus
+class SdBus {
+public:
+    SdBus() : bus_(nullptr) {
+        int r = sd_bus_open_system(&bus_);
+        if (r < 0) {
+            throw VmStateError("Failed to connect to system bus: " + std::string(strerror(-r)));
+        }
+    }
+
+    ~SdBus() {
+        if (bus_) {
+            sd_bus_unref(bus_);
+        }
+    }
+
+    sd_bus* get() { return bus_; }
+
+    // Prevent copying
+    SdBus(const SdBus&) = delete;
+    SdBus& operator=(const SdBus&) = delete;
+
+private:
+    sd_bus* bus_;
+};
+
+// Systemd unit operations via D-Bus
+class SystemdManager {
+public:
+    SystemdManager() = default;
+
+    void start_unit(const std::string& unit) {
+        call_unit_method("StartUnit", unit, "replace");
+    }
+
+    void stop_unit(const std::string& unit) {
+        call_unit_method("StopUnit", unit, "replace");
+    }
+
+    void restart_unit(const std::string& unit) {
+        call_unit_method("RestartUnit", unit, "replace");
+    }
+
+    bool is_active(const std::string& unit) {
+        SdBus bus;
+        sd_bus_error error = SD_BUS_ERROR_NULL;
+        sd_bus_message* reply = nullptr;
+        char* state = nullptr;
+
+        // Get unit object path
+        std::string unit_path = get_unit_path(bus, unit);
+        if (unit_path.empty()) {
+            return false;
+        }
+
+        // Get ActiveState property
+        int r = sd_bus_get_property_string(
+            bus.get(),
+            "org.freedesktop.systemd1",
+            unit_path.c_str(),
+            "org.freedesktop.systemd1.Unit",
+            "ActiveState",
+            &error,
+            &state
+        );
+
+        if (r < 0) {
+            sd_bus_error_free(&error);
+            return false;
+        }
+
+        bool active = (state && strcmp(state, "active") == 0);
+        free(state);
+        sd_bus_error_free(&error);
+
+        return active;
+    }
+
+private:
+    void call_unit_method(const char* method, const std::string& unit, const char* mode) {
+        SdBus bus;
+        sd_bus_error error = SD_BUS_ERROR_NULL;
+        sd_bus_message* reply = nullptr;
+
+        int r = sd_bus_call_method(
+            bus.get(),
+            "org.freedesktop.systemd1",
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager",
+            method,
+            &error,
+            &reply,
+            "ss",
+            unit.c_str(),
+            mode
+        );
+
+        if (r < 0) {
+            std::string err_msg = error.message ? error.message : "Unknown error";
+            sd_bus_error_free(&error);
+            sd_bus_message_unref(reply);
+            throw VmStateError(std::string(method) + " failed for " + unit + ": " + err_msg);
+        }
+
+        sd_bus_error_free(&error);
+        sd_bus_message_unref(reply);
+    }
+
+    std::string get_unit_path(SdBus& bus, const std::string& unit) {
+        sd_bus_error error = SD_BUS_ERROR_NULL;
+        sd_bus_message* reply = nullptr;
+        const char* path = nullptr;
+
+        int r = sd_bus_call_method(
+            bus.get(),
+            "org.freedesktop.systemd1",
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager",
+            "GetUnit",
+            &error,
+            &reply,
+            "s",
+            unit.c_str()
+        );
+
+        if (r < 0) {
+            sd_bus_error_free(&error);
+            sd_bus_message_unref(reply);
+            return "";
+        }
+
+        r = sd_bus_message_read(reply, "o", &path);
+        std::string result = (r >= 0 && path) ? path : "";
+
+        sd_bus_error_free(&error);
+        sd_bus_message_unref(reply);
+
+        return result;
+    }
+};
 
 // LocalZfsBackend implementation
 
@@ -121,31 +263,6 @@ void LocalZfsBackend::save_assignments(const std::unordered_map<std::string, std
     f << j.dump(2);
 }
 
-int LocalZfsBackend::run_command(const std::string& cmd) {
-    return system(cmd.c_str());
-}
-
-std::string LocalZfsBackend::run_command_output(const std::string& cmd) {
-    std::array<char, 128> buffer;
-    std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
-    if (!pipe) {
-        throw VmStateError("Failed to run command: " + cmd);
-    }
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        result += buffer.data();
-    }
-    return result;
-}
-
-void LocalZfsBackend::systemctl(const std::string& action, Slot slot) {
-    std::string service = "microvm@" + slot_to_string(slot) + ".service";
-    std::string cmd = "systemctl " + action + " " + service;
-    if (run_command(cmd) != 0) {
-        throw VmStateError("systemctl " + action + " failed for " + slot_to_string(slot));
-    }
-}
-
 void LocalZfsBackend::set_ownership(const std::filesystem::path& path) {
     struct passwd* pw = getpwnam("microvm");
     struct group* gr = getgrnam("kvm");
@@ -153,6 +270,10 @@ void LocalZfsBackend::set_ownership(const std::filesystem::path& path) {
         chown(path.c_str(), pw->pw_uid, gr->gr_gid);
     }
     chmod(path.c_str(), 0755);
+}
+
+std::string LocalZfsBackend::service_name(Slot slot) const {
+    return "microvm@" + slot_to_string(slot) + ".service";
 }
 
 std::vector<SlotInfo> LocalZfsBackend::list_slots() {
@@ -283,9 +404,8 @@ std::string LocalZfsBackend::get_slot_state(Slot slot) {
 }
 
 bool LocalZfsBackend::is_slot_running(Slot slot) {
-    std::string service = "microvm@" + slot_to_string(slot) + ".service";
-    std::string cmd = "systemctl is-active --quiet " + service;
-    return run_command(cmd) == 0;
+    SystemdManager systemd;
+    return systemd.is_active(service_name(slot));
 }
 
 bool LocalZfsBackend::state_exists(const std::string& state) {
@@ -524,15 +644,18 @@ void LocalZfsBackend::migrate(const std::string& state, Slot slot) {
 }
 
 void LocalZfsBackend::start_slot(Slot slot) {
-    systemctl("start", slot);
+    SystemdManager systemd;
+    systemd.start_unit(service_name(slot));
 }
 
 void LocalZfsBackend::stop_slot(Slot slot) {
-    systemctl("stop", slot);
+    SystemdManager systemd;
+    systemd.stop_unit(service_name(slot));
 }
 
 void LocalZfsBackend::restart_slot(Slot slot) {
-    systemctl("restart", slot);
+    SystemdManager systemd;
+    systemd.restart_unit(service_name(slot));
 }
 
 } // namespace vmstate

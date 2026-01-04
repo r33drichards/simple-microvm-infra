@@ -5,6 +5,7 @@ project('vm-state', 'cpp',
 # Dependencies
 zfs_dep = dependency('libzfs', required : true)
 json_dep = dependency('nlohmann_json', required : true)
+systemd_dep = dependency('libsystemd', required : true)
 
 # Source files
 sources = [
@@ -15,5 +16,5 @@ sources = [
 # Build executable
 executable('vm-state',
   sources,
-  dependencies : [zfs_dep, json_dep],
+  dependencies : [zfs_dep, json_dep, systemd_dep],
   install : true)

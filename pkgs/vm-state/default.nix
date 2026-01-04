@@ -15,6 +15,7 @@ pkgs.stdenv.mkDerivation {
   buildInputs = with pkgs; [
     zfs
     nlohmann_json
+    systemd
   ];
 
   meta = with pkgs.lib; {

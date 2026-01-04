@@ -148,11 +148,8 @@ private:
     std::unordered_map<std::string, std::string> load_assignments();
     void save_assignments(const std::unordered_map<std::string, std::string>& assignments);
 
-    void systemctl(const std::string& action, Slot slot);
     void set_ownership(const std::filesystem::path& path);
-
-    int run_command(const std::string& cmd);
-    std::string run_command_output(const std::string& cmd);
+    std::string service_name(Slot slot) const;
 };
 
 /// Exception for vm-state errors
