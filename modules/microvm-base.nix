@@ -57,8 +57,8 @@ in
     # Enable writable overlay for imperative package installs (nix-env, nix profile)
     microvm.writableStoreOverlay = "/nix/.rw-store";
 
-    # Disable dedupe/fragments to enable multi-threaded erofs builds (much faster)
-    microvm.erofs.flags = [ "-zlz4hc" "-Eztailpacking" ];
+    # Use squashfs instead of erofs for multi-threaded builds (much faster)
+    microvm.storeDiskType = "squashfs";
 
     # No virtiofs shares - VMs have independent storage
     microvm.shares = [];
