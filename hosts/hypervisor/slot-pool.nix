@@ -13,7 +13,7 @@
 # 5. Agent calls POST /ip/return with borrow token
 # 6. ip-allocator calls slot-pool-subscriber /return webhook
 # 7. Subscriber snapshots current state and resets slot
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, ip-allocator, ... }:
 
 {
   # Slot pool subscriber - handles snapshot management webhooks
@@ -26,6 +26,7 @@
   # IP allocator webserver - manages the slot pool
   services.ip-allocator-webserver = {
     enable = true;
+    package = ip-allocator.packages.aarch64-linux.default;
     port = 8000;
     address = "0.0.0.0";  # Accessible from network
     redisUrl = "redis://127.0.0.1:6379";
