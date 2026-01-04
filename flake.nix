@@ -54,7 +54,7 @@
               network = name;
               # Default state matches slot name
               stateName = name;
-            } // slotConfig))
+            } // (builtins.removeAttrs slotConfig ["config"])))
           ] ++ (if slotConfig ? config then [slotConfig.config] else []);
         }
       ) slots;
