@@ -1,22 +1,10 @@
 # modules/slot-vm.nix
-# Minimal VM configuration for portable state architecture
-# Users customize their VMs via nixos-rebuild from inside the VM
+# Minimal slot config - user adds everything else via nixos-rebuild
 # State (data.img) is just block storage that can be swapped
 { config, lib, pkgs, ... }:
 
 {
-  # SSH for remote access
-  services.openssh.enable = true;
-
-  # Minimal packages - user installs what they need
-  environment.systemPackages = with pkgs; [
-    vim
-    curl
-    htop
-    git
-  ];
-
-  # User with SSH access
+  # User for SSH access
   users.users.robertwendt = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
@@ -25,6 +13,4 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
     ];
   };
-
-  system.stateVersion = "24.05";
 }
