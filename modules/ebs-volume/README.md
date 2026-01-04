@@ -144,3 +144,4 @@ The module finds volumes by Name tag within the same availability zone. Ensure u
 - [example.nix](./example.nix): Complete example configuration
 - [ZFS on NixOS](https://nixos.wiki/wiki/ZFS)
 - [AWS EBS Documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AmazonEBS.html)
+2
