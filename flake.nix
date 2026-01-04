@@ -33,6 +33,7 @@
 
       # Custom packages
       playwright-mcp = pkgs.callPackage ./pkgs/playwright-mcp {};
+      vm-state = pkgs.callPackage ./pkgs/vm-state { src = ./vm-state; };
 
       # Slot definitions - each slot is a fixed network identity
       # Slots are minimal NixOS - users customize via nixos-rebuild inside VM
@@ -71,7 +72,7 @@
     in {
       # Custom packages
       packages.${system} = {
-        inherit playwright-mcp;
+        inherit playwright-mcp vm-state;
         setup-hypervisor-iam = setupHypervisorIam system;
       };
 
@@ -103,7 +104,7 @@
         # Hypervisor (physical host)
         hypervisor = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
-          specialArgs = { inherit self; };
+          specialArgs = { inherit self vm-state; };
           modules = [
             microvm.nixosModules.host  # Enable MicroVM host support
             comin.nixosModules.comin   # GitOps deployment automation
