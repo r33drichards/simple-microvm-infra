@@ -47,7 +47,7 @@ ssh -o ProxyJump=root@34.219.181.99 \
     root@10.1.0.2
 ```
 
-### Method 4: SSH Config (Recommended for Regular Use)
+### Method 4: SSH Config (Recommended)
 
 Add to `~/.ssh/config`:
 
@@ -59,31 +59,31 @@ Host hypervisor
 
 Host vm1
     HostName 10.1.0.2
-    User root
+    User robertwendt
     ProxyJump hypervisor
     IdentityFile ~/.ssh/rw-ssh-key
 
 Host vm2
     HostName 10.2.0.2
-    User root
+    User robertwendt
     ProxyJump hypervisor
     IdentityFile ~/.ssh/rw-ssh-key
 
 Host vm3
     HostName 10.3.0.2
-    User root
+    User robertwendt
     ProxyJump hypervisor
     IdentityFile ~/.ssh/rw-ssh-key
 
 Host vm4
     HostName 10.4.0.2
-    User root
+    User robertwendt
     ProxyJump hypervisor
     IdentityFile ~/.ssh/rw-ssh-key
 
 Host vm5
     HostName 10.5.0.2
-    User root
+    User robertwendt
     ProxyJump hypervisor
     IdentityFile ~/.ssh/rw-ssh-key
 ```
@@ -91,9 +91,59 @@ Host vm5
 Then simply:
 
 ```bash
-ssh hypervisor
-ssh vm1
-ssh vm3
+ssh hypervisor   # connects as root
+ssh vm1          # connects as robertwendt
+ssh vm3          # connects as robertwendt
+```
+
+To connect as root to a VM, use:
+```bash
+ssh -o User=root vm1
+```
+
+### One-liner Setup
+
+Copy and paste this to set up your SSH config:
+
+```bash
+cat >> ~/.ssh/config << 'EOF'
+
+Host hypervisor
+    HostName 34.219.181.99
+    User root
+    IdentityFile ~/.ssh/rw-ssh-key
+
+Host vm1
+    HostName 10.1.0.2
+    User robertwendt
+    ProxyJump hypervisor
+    IdentityFile ~/.ssh/rw-ssh-key
+
+Host vm2
+    HostName 10.2.0.2
+    User robertwendt
+    ProxyJump hypervisor
+    IdentityFile ~/.ssh/rw-ssh-key
+
+Host vm3
+    HostName 10.3.0.2
+    User robertwendt
+    ProxyJump hypervisor
+    IdentityFile ~/.ssh/rw-ssh-key
+
+Host vm4
+    HostName 10.4.0.2
+    User robertwendt
+    ProxyJump hypervisor
+    IdentityFile ~/.ssh/rw-ssh-key
+
+Host vm5
+    HostName 10.5.0.2
+    User robertwendt
+    ProxyJump hypervisor
+    IdentityFile ~/.ssh/rw-ssh-key
+EOF
+chmod 600 ~/.ssh/config
 ```
 
 ## IP Address Reference
