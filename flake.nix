@@ -24,9 +24,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # IP/Slot allocator webserver
+    ip-allocator = {
+      url = "github:r33drichards/ip-allocator-webserver";
+    };
+
   };
 
-  outputs = { self, nixpkgs, microvm, comin }:
+  outputs = { self, nixpkgs, microvm, comin, ip-allocator }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -107,6 +112,7 @@
           modules = [
             microvm.nixosModules.host  # Enable MicroVM host support
             comin.nixosModules.comin   # GitOps deployment automation
+            ip-allocator.nixosModules.default  # IP/Slot allocator webserver
             ./hosts/hypervisor
           ];
         };

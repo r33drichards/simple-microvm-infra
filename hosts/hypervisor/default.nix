@@ -33,6 +33,9 @@
 
     # EBS volume management with ZFS
     ../../modules/ebs-volume
+
+    # IP/Slot allocator with session snapshot management
+    ./ip-allocator.nix
   ];
 
   # Nix settings
