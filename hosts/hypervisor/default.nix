@@ -1,6 +1,11 @@
 # hosts/hypervisor/default.nix
 # Physical hypervisor host configuration
 # Manages: MicroVM storage, Tailscale, MicroVM lifecycle
+#
+# Portable State Architecture:
+# - Slots are fixed network identities (slot1 = 10.1.0.2, etc.)
+# - States are portable ZFS datasets in /var/lib/microvms/states/
+# - Use vm-state CLI to manage states
 { config, pkgs, self, ... }:
 {
   imports = [
@@ -53,9 +58,9 @@
   networking.hostName = "hypervisor";
 
   # EBS volume with ZFS for microvm storage (enables ZFS snapshots)
-  # Each VM gets its own child dataset for independent snapshots:
-  #   zfs snapshot microvms/storage/vm1@backup
-  #   zfs snapshot microvms/storage/vm2@backup
+  # States are stored as child datasets for portability:
+  #   microvms/states/slot1, microvms/states/slot2, etc.
+  # Use vm-state CLI to manage states and assignments
   services.ebsVolumes = {
     enable = true;
     volumes."microvm-storage" = {
@@ -65,8 +70,8 @@
       dataset = "storage";
       volumeType = "gp3";
       device = "/dev/sdf";
-      # Per-VM datasets for independent snapshots
-      childDatasets = [ "vm1" "vm2" "vm3" "vm4" "vm5" ];
+      # Per-slot default state datasets
+      childDatasets = [ "states" ];
       # Ownership for microvm service
       mountOwner = "microvm";
       mountGroup = "kvm";
@@ -103,26 +108,29 @@
     jq
     awscli2
 
-    # Custom script to reset all VM storage volumes
+    # vm-state CLI for managing portable VM states
+    (pkgs.writeShellScriptBin "vm-state" (builtins.readFile ../../scripts/vm-state.sh))
+
+    # Custom script to reset all slot storage volumes
     (pkgs.writeShellScriptBin "reset-storage" ''
       set -euo pipefail
 
-      echo "=== Resetting all VM storage volumes ==="
+      echo "=== Resetting all slot storage volumes ==="
       echo ""
 
-      # Stop all VMs
-      echo "Stopping all VMs..."
-      for vm in vm1 vm2 vm3 vm4 vm5; do
-        echo "  - Stopping $vm..."
-        systemctl stop microvm@$vm
+      # Stop all slots
+      echo "Stopping all slots..."
+      for slot in slot1 slot2 slot3 slot4 slot5; do
+        echo "  - Stopping $slot..."
+        systemctl stop microvm@$slot || true
       done
-      echo "All VMs stopped."
+      echo "All slots stopped."
       echo ""
 
       # Delete all persistent volumes
       echo "Deleting persistent volumes..."
-      for vm in vm1 vm2 vm3 vm4 vm5; do
-        volume="/var/lib/microvms/$vm/data.img"
+      for slot in slot1 slot2 slot3 slot4 slot5; do
+        volume="/var/lib/microvms/states/$slot/data.img"
         if [ -f "$volume" ]; then
           echo "  - Deleting $volume..."
           rm "$volume"
@@ -133,17 +141,17 @@
       echo "All volumes deleted."
       echo ""
 
-      # Start all VMs (they will recreate volumes on first boot)
-      echo "Starting all VMs..."
-      for vm in vm1 vm2 vm3 vm4 vm5; do
-        echo "  - Starting $vm..."
-        systemctl start microvm@$vm
+      # Start all slots (they will recreate volumes on first boot)
+      echo "Starting all slots..."
+      for slot in slot1 slot2 slot3 slot4 slot5; do
+        echo "  - Starting $slot..."
+        systemctl start microvm@$slot
       done
-      echo "All VMs started."
+      echo "All slots started."
       echo ""
 
       echo "=== Storage reset complete ==="
-      echo "New volumes will be created automatically on VM boot."
+      echo "New volumes will be created automatically on slot boot."
     '')
   ];
 
@@ -185,54 +193,62 @@
     ];
   };
 
-  # Declare MicroVMs
+  # Declare MicroVM slots
   microvm.vms = {
-    vm1 = {
+    slot1 = {
       flake = self;
       updateFlake = "root/simple-microvm-infra";
     };
-    vm2 = {
+    slot2 = {
       flake = self;
       updateFlake = "root/simple-microvm-infra";
     };
-    vm3 = {
+    slot3 = {
       flake = self;
       updateFlake = "root/simple-microvm-infra";
     };
-    vm4 = {
+    slot4 = {
       flake = self;
       updateFlake = "root/simple-microvm-infra";
     };
-    vm5 = {
+    slot5 = {
       flake = self;
       updateFlake = "root/simple-microvm-infra";
     };
   };
 
-  # Auto-start all VMs on boot
-  microvm.autostart = [ "vm1" "vm2" "vm3" "vm4" "vm5" ];
+  # Auto-start all slots on boot
+  microvm.autostart = [ "slot1" "slot2" "slot3" "slot4" "slot5" ];
 
-  # Keep VM runners as GC roots to prevent garbage collection
+  # Keep slot runners as GC roots to prevent garbage collection
   # This ensures the microvm runners aren't deleted during nix-collect-garbage
-  # Access via self.nixosConfigurations since VMs are defined at flake level
+  # Access via self.nixosConfigurations since slots are defined at flake level
   system.extraDependencies = [
-    self.nixosConfigurations.vm1.config.microvm.declaredRunner
-    self.nixosConfigurations.vm2.config.microvm.declaredRunner
-    self.nixosConfigurations.vm3.config.microvm.declaredRunner
-    self.nixosConfigurations.vm4.config.microvm.declaredRunner
-    self.nixosConfigurations.vm5.config.microvm.declaredRunner
+    self.nixosConfigurations.slot1.config.microvm.declaredRunner
+    self.nixosConfigurations.slot2.config.microvm.declaredRunner
+    self.nixosConfigurations.slot3.config.microvm.declaredRunner
+    self.nixosConfigurations.slot4.config.microvm.declaredRunner
+    self.nixosConfigurations.slot5.config.microvm.declaredRunner
   ];
 
-  # Create MicroVM storage directory on root filesystem
-  # This is simpler than ZFS but uses the root volume for storage
-  # NOTE: Directories must be owned by microvm:kvm to allow VMs to create the 'booted' symlink
+  # Create MicroVM storage directories
+  # Slots directory holds slot-specific runtime state
+  # States directory holds portable persistent data
   systemd.tmpfiles.rules = [
     "d /var/lib/microvms 0755 microvm kvm -"
-    "d /var/lib/microvms/vm1 0755 microvm kvm -"
-    "d /var/lib/microvms/vm2 0755 microvm kvm -"
-    "d /var/lib/microvms/vm3 0755 microvm kvm -"
-    "d /var/lib/microvms/vm4 0755 microvm kvm -"
-    "d /var/lib/microvms/vm5 0755 microvm kvm -"
+    "d /var/lib/microvms/states 0755 microvm kvm -"
+    # Create default state directories for each slot
+    "d /var/lib/microvms/states/slot1 0755 microvm kvm -"
+    "d /var/lib/microvms/states/slot2 0755 microvm kvm -"
+    "d /var/lib/microvms/states/slot3 0755 microvm kvm -"
+    "d /var/lib/microvms/states/slot4 0755 microvm kvm -"
+    "d /var/lib/microvms/states/slot5 0755 microvm kvm -"
+    # Slot runtime directories (for symlinks, sockets, etc.)
+    "d /var/lib/microvms/slot1 0755 microvm kvm -"
+    "d /var/lib/microvms/slot2 0755 microvm kvm -"
+    "d /var/lib/microvms/slot3 0755 microvm kvm -"
+    "d /var/lib/microvms/slot4 0755 microvm kvm -"
+    "d /var/lib/microvms/slot5 0755 microvm kvm -"
   ];
 
   # Helper script to wait for TAP interface and attach to bridge
@@ -254,71 +270,71 @@
     exit 1
   '';
 
-  # Systemd services to add TAP interfaces to bridges when VMs start
+  # Systemd services to add TAP interfaces to bridges when slots start
   # These services wait for the microvm to start and the TAP interface to be created by QEMU
-  systemd.services."microvm-bridge-vm1" = {
-    description = "Add vm-vm1 TAP interface to br-vm1 bridge";
-    after = [ "microvm@vm1.service" ];
-    bindsTo = [ "microvm@vm1.service" ];
+  systemd.services."microvm-bridge-slot1" = {
+    description = "Add vm-slot1 TAP interface to br-slot1 bridge";
+    after = [ "microvm@slot1.service" ];
+    bindsTo = [ "microvm@slot1.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm1 br-vm1";
-      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm1 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-slot1 br-slot1";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-slot1 nomaster";
     };
-    wantedBy = [ "microvm@vm1.service" ];
+    wantedBy = [ "microvm@slot1.service" ];
   };
 
-  systemd.services."microvm-bridge-vm2" = {
-    description = "Add vm-vm2 TAP interface to br-vm2 bridge";
-    after = [ "microvm@vm2.service" ];
-    bindsTo = [ "microvm@vm2.service" ];
+  systemd.services."microvm-bridge-slot2" = {
+    description = "Add vm-slot2 TAP interface to br-slot2 bridge";
+    after = [ "microvm@slot2.service" ];
+    bindsTo = [ "microvm@slot2.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm2 br-vm2";
-      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm2 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-slot2 br-slot2";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-slot2 nomaster";
     };
-    wantedBy = [ "microvm@vm2.service" ];
+    wantedBy = [ "microvm@slot2.service" ];
   };
 
-  systemd.services."microvm-bridge-vm3" = {
-    description = "Add vm-vm3 TAP interface to br-vm3 bridge";
-    after = [ "microvm@vm3.service" ];
-    bindsTo = [ "microvm@vm3.service" ];
+  systemd.services."microvm-bridge-slot3" = {
+    description = "Add vm-slot3 TAP interface to br-slot3 bridge";
+    after = [ "microvm@slot3.service" ];
+    bindsTo = [ "microvm@slot3.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm3 br-vm3";
-      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm3 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-slot3 br-slot3";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-slot3 nomaster";
     };
-    wantedBy = [ "microvm@vm3.service" ];
+    wantedBy = [ "microvm@slot3.service" ];
   };
 
-  systemd.services."microvm-bridge-vm4" = {
-    description = "Add vm-vm4 TAP interface to br-vm4 bridge";
-    after = [ "microvm@vm4.service" ];
-    bindsTo = [ "microvm@vm4.service" ];
+  systemd.services."microvm-bridge-slot4" = {
+    description = "Add vm-slot4 TAP interface to br-slot4 bridge";
+    after = [ "microvm@slot4.service" ];
+    bindsTo = [ "microvm@slot4.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm4 br-vm4";
-      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm4 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-slot4 br-slot4";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-slot4 nomaster";
     };
-    wantedBy = [ "microvm@vm4.service" ];
+    wantedBy = [ "microvm@slot4.service" ];
   };
 
-  systemd.services."microvm-bridge-vm5" = {
-    description = "Add vm-vm5 TAP interface to br-vm5 bridge";
-    after = [ "microvm@vm5.service" ];
-    bindsTo = [ "microvm@vm5.service" ];
+  systemd.services."microvm-bridge-slot5" = {
+    description = "Add vm-slot5 TAP interface to br-slot5 bridge";
+    after = [ "microvm@slot5.service" ];
+    bindsTo = [ "microvm@slot5.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-vm5 br-vm5";
-      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-vm5 nomaster";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/microvm-bridge-attach.sh vm-slot5 br-slot5";
+      ExecStop = "-${pkgs.iproute2}/bin/ip link set vm-slot5 nomaster";
     };
-    wantedBy = [ "microvm@vm5.service" ];
+    wantedBy = [ "microvm@slot5.service" ];
   };
 
   # Fix microvm service to use correct working directory

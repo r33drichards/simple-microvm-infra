@@ -1,6 +1,11 @@
 # flake.nix
 # Main entry point for simple-microvm-infra
 # Defines: dependencies (nixpkgs, microvm.nix) and all system configs
+#
+# Portable State Architecture:
+# - Slots are fixed network identities (slot1 = 10.1.0.2, slot2 = 10.2.0.2, etc.)
+# - States are portable ZFS datasets that can be snapshotted and migrated
+# - Any state can run on any slot via the vm-state CLI tool
 {
   description = "Minimal MicroVM Infrastructure - Production Learning Template";
 
@@ -29,54 +34,48 @@
       # Custom packages
       playwright-mcp = pkgs.callPackage ./pkgs/playwright-mcp {};
 
-      # VM definitions - add/remove VMs here
-      # Each VM gets its own isolated network (10.X.0.0/24)
-      vms = {
-        vm1 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
-          modules = [
-            ./modules/desktop-vm.nix
-          ];
+      # Slot definitions - each slot is a fixed network identity
+      # States (persistent data) can be assigned to any slot
+      #
+      # Default state names match slot names for simplicity:
+      #   slot1 uses state "slot1", slot2 uses state "slot2", etc.
+      #
+      # To run a different state on a slot, use the vm-state CLI:
+      #   vm-state assign slot1 my-custom-state
+      slots = {
+        slot1 = {
+          # All slots use the unified slot-vm module
+          modules = [ ./modules/slot-vm.nix ];
         };
-        vm2 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
-          modules = [
-            ./modules/desktop-vm.nix
-          ];
+        slot2 = {
+          modules = [ ./modules/slot-vm.nix ];
         };
-        vm3 = {
-          # Remote desktop VM with browser access (XRDP + XFCE)
-          modules = [
-            ./modules/desktop-vm.nix
-          ];
+        slot3 = {
+          modules = [ ./modules/slot-vm.nix ];
         };
-        vm4 = {
-          # K3s (lightweight Kubernetes) server
-          modules = [
-            ./modules/k3s-vm.nix
-            # Increase resources for Kubernetes
-            { microvm.mem = 4096; microvm.vcpu = 2; }
-          ];
+        slot4 = {
+          modules = [ ./modules/slot-vm.nix ];
+          # Extra resources for heavier workloads
+          config = { microvm.mem = 4096; microvm.vcpu = 2; };
         };
-        vm5 = {
-          # Incus container/VM host with Web UI
-          modules = [
-            ./modules/incus-vm.nix
-          ];
+        slot5 = {
+          modules = [ ./modules/slot-vm.nix ];
         };
       };
 
-      # Generate nixosConfiguration for each VM
-      vmConfigurations = nixpkgs.lib.mapAttrs (name: vmConfig:
+      # Generate nixosConfiguration for each slot
+      slotConfigurations = nixpkgs.lib.mapAttrs (name: slotConfig:
         self.lib.microvmSystem {
           modules = [
             (import ./lib/create-vm.nix ({
               hostname = name;
               network = name;
-            } // vmConfig))
-          ];
+              # Default state matches slot name
+              stateName = name;
+            } // slotConfig))
+          ] ++ (if slotConfig ? config then [slotConfig.config] else []);
         }
-      ) vms;
+      ) slots;
 
       # Script packages (for multiple systems)
       setupHypervisorIam = system: let
@@ -129,7 +128,7 @@
             ./hosts/hypervisor
           ];
         };
-      } // vmConfigurations;  # Merge in generated VM configurations
+      } // slotConfigurations;  # Merge in generated slot configurations
 
       # Export our library function for building MicroVMs
       lib.microvmSystem = import ./lib { inherit self nixpkgs microvm comin playwright-mcp; };
