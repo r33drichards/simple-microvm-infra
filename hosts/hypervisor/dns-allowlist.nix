@@ -80,6 +80,8 @@ let
     # === AI/ML Services ===
     "anthropic.com"
     "api.anthropic.com"
+    "cursor.com"
+    "downloads.cursor.com"
     "openai.com"
     "api.openai.com"
     "perplexity.ai"
