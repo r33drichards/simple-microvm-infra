@@ -1,18 +1,26 @@
 { pkgs, src }:
 
-pkgs.rustPlatform.buildRustPackage {
+pkgs.stdenv.mkDerivation {
   pname = "vm-state";
   version = "0.1.0";
 
   inherit src;
 
-  cargoLock = {
-    lockFile = "${src}/Cargo.lock";
-  };
+  nativeBuildInputs = with pkgs; [
+    meson
+    ninja
+    pkg-config
+  ];
+
+  buildInputs = with pkgs; [
+    zfs
+    nlohmann_json
+  ];
 
   meta = with pkgs.lib; {
     description = "Manage portable MicroVM states with ZFS backend";
     license = licenses.mit;
     mainProgram = "vm-state";
+    platforms = platforms.linux;
   };
 }
