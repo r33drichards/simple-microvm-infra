@@ -10,10 +10,39 @@ with lib;
 let
   cfg = config.services.slotPoolSubscriber;
 
-  subscriberScript = pkgs.writeScriptBin "slot-pool-subscriber" ''
-    #!${pkgs.python3}/bin/python3
-    ${builtins.readFile ../scripts/slot-pool-subscriber.py}
-  '';
+  # Create a Python package with both the ZFS manager and subscriber
+  slotPoolPackage = pkgs.stdenv.mkDerivation {
+    name = "slot-pool-subscriber";
+    src = ../scripts;
+    
+    buildInputs = [ pkgs.python3 ];
+    
+    installPhase = ''
+      mkdir -p $out/lib/slot-pool
+      mkdir -p $out/bin
+      
+      # Copy the ZFS manager module to the library directory
+      cp ${../scripts/zfs_manager.py} $out/lib/slot-pool/zfs_manager.py
+      
+      # Create a wrapper script that sets up Python path and runs the subscriber
+      cat > $out/bin/slot-pool-subscriber << 'EOF'
+      #!${pkgs.python3}/bin/python3
+      import sys
+      import os
+      
+      # Add our library directory to Python path
+      lib_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'lib', 'slot-pool')
+      sys.path.insert(0, lib_dir)
+      
+      # Now import and run the actual subscriber code
+      EOF
+      
+      # Append the subscriber code (without the shebang line)
+      tail -n +2 ${../scripts/slot-pool-subscriber.py} >> $out/bin/slot-pool-subscriber
+      
+      chmod +x $out/bin/slot-pool-subscriber
+    '';
+  };
 in
 {
   options.services.slotPoolSubscriber = {
@@ -52,7 +81,7 @@ in
 
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${subscriberScript}/bin/slot-pool-subscriber";
+        ExecStart = "${slotPoolPackage}/bin/slot-pool-subscriber";
         Restart = "always";
         RestartSec = 5;
 
