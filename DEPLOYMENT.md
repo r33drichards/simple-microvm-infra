@@ -117,11 +117,11 @@ journalctl -t comin | tail -20
 # List all MicroVM services
 systemctl list-units 'microvm@*'
 
-# Check specific VM status
-systemctl status microvm@vm1
+# Check specific slot status
+systemctl status microvm@slot1
 
-# View VM logs
-journalctl -u microvm@vm1 -f
+# View slot logs
+journalctl -u microvm@slot1 -f
 ```
 
 ### Deployment Logs
@@ -261,20 +261,20 @@ journalctl -u nixos-rebuild
 3. Comin will automatically retry with the new commit
 4. Or manually rollback: `nixos-rebuild switch --rollback`
 
-### Problem: VMs Not Restarting
+### Problem: Slots Not Restarting
 
 **Diagnosis:**
 ```bash
-# Check if VM services are enabled
+# Check if slot services are enabled
 systemctl list-units 'microvm@*'
 
-# Check specific VM status
-systemctl status microvm@vm1
+# Check specific slot status
+systemctl status microvm@slot1
 ```
 
 **Solution:**
-- Manually restart VM: `systemctl restart microvm@vm1`
-- Check VM logs: `journalctl -u microvm@vm1 -n 100`
+- Manually restart slot: `systemctl restart microvm@slot1`
+- Check slot logs: `journalctl -u microvm@slot1 -n 100`
 
 ### Problem: Repository Authentication
 
@@ -399,52 +399,104 @@ postDeployHook = pkgs.writeShellScript "post-deploy-hook" ''
    - Keep CLAUDE.md updated with architecture changes
    - Maintain this DEPLOYMENT.md with deployment procedures
 
-## VM Deployment
+## Slot Deployment
 
-VMs are deployed automatically when the hypervisor configuration is rebuilt. The hypervisor manages VM runners via `microvm@` systemd services.
+Slots are deployed automatically when the hypervisor configuration is rebuilt. The hypervisor manages slot runners via `microvm@` systemd services.
 
-### Fresh VM Deployment (Clean State)
+### Portable State Architecture
+
+Slots are fixed network identities. States are portable data that can be snapshotted and moved between slots:
+
+```
+Slots (fixed network identity)    States (portable data)
+─────────────────────────────     ─────────────────────
+ slot1 (10.1.0.2) ───────────────→ state "slot1" (default)
+ slot2 (10.2.0.2) ───────────────→ state "slot2" (default)
+ slot3 (10.3.0.2) ───────────────→ state "dev-env" (custom)
+
+States can be:
+ • Snapshotted: vm-state snapshot slot1 before-update
+ • Cloned: vm-state clone slot1 my-experiment
+ • Migrated: vm-state migrate my-experiment slot3
+```
+
+### Fresh Slot Deployment (Clean State)
 
 ```bash
-# On hypervisor: Stop VMs and delete disk images
-for vm in vm1 vm2 vm3 vm4 vm5; do
-  systemctl stop microvm@$vm
-  rm -f /var/lib/microvms/$vm/*.img
+# On hypervisor: Stop slots and delete state data.img files
+for slot in slot1 slot2 slot3 slot4 slot5; do
+  systemctl stop microvm@$slot
+  rm -f /var/lib/microvms/states/$slot/data.img
 done
 
-# Rebuild hypervisor (installs new VM runners)
+# Rebuild hypervisor (installs new slot runners)
 cd /root/simple-microvm-infra && git pull
 nixos-rebuild switch --flake .#hypervisor
 
-# Start VMs (new disk images auto-created)
-for vm in vm1 vm2 vm3 vm4 vm5; do
-  systemctl start microvm@$vm
+# Start slots (new data.img auto-created)
+for slot in slot1 slot2 slot3 slot4 slot5; do
+  systemctl start microvm@$slot
 done
 
-# Create base snapshots after VMs boot
+# Create base snapshots after slots boot
 sleep 60
-for vm in vm1 vm2 vm3 vm4 vm5; do
-  zfs snapshot microvms/storage/$vm@base
+for slot in slot1 slot2 slot3 slot4 slot5; do
+  vm-state snapshot $slot base
 done
 ```
 
-### Reset VM to Clean State
+### Reset Slot to Clean State
 
 ```bash
-# Stop, rollback, restart
-systemctl stop microvm@vm1
-zfs rollback microvms/storage/vm1@base
-systemctl start microvm@vm1
+# Option 1: Create a fresh state and migrate to slot
+vm-state create fresh-state
+vm-state migrate fresh-state slot1
+
+# Option 2: Delete data.img and restart (creates new empty volume)
+systemctl stop microvm@slot1
+rm -f /var/lib/microvms/states/slot1/data.img
+systemctl start microvm@slot1
 ```
 
-### VM Storage Architecture
+### State Management with vm-state CLI
 
-Each VM has three disk images:
-- **erofs store**: Read-only Nix closure (built at deploy time)
-- **data.img**: 64GB ext4 root filesystem
-- **nix-overlay.img**: 8GB ext4 writable Nix store overlay
+```bash
+# List all states and slot assignments
+vm-state list
 
-The erofs store is rebuilt when the VM configuration changes. The data.img and nix-overlay.img persist until manually deleted or rolled back via ZFS.
+# Snapshot current slot's state
+vm-state snapshot slot1 my-backup
+
+# Clone a state for experimentation
+vm-state clone slot1 experiment
+
+# Migrate state to another slot
+vm-state migrate experiment slot3
+
+# Restore from a snapshot
+vm-state restore my-backup recovered-state
+vm-state assign slot2 recovered-state
+systemctl restart microvm@slot2
+```
+
+### Slot Storage Architecture
+
+Each slot mounts its assigned state's data.img:
+
+- **squashfs/erofs store** (`/dev/vda`): Read-only minimal Nix store closure (~300-500MB)
+  - Contains: kernel, systemd, ssh, networkd, nix, nodejs
+  - Built at deploy time, shared by all slots
+
+- **data.img** (`/dev/vdb`): 64GB ext4 persistent root filesystem
+  - Contains: root filesystem, home directories, Nix store overlay
+  - This is the portable "state" that can be snapshotted and migrated
+  - Customizations via `nixos-rebuild` are stored here
+
+The Nix store uses an overlay:
+- **Lower layer**: Read-only squashfs with minimal base closure
+- **Upper layer**: `/nix/.rw-store` directory on root filesystem (in data.img)
+
+**Key point**: States are just the data.img file. They can be snapshotted, cloned, and moved between slots using the `vm-state` CLI.
 
 ## References
 
