@@ -21,7 +21,7 @@ set -euo pipefail
 STATES_DIR="/var/lib/microvms/states"
 ASSIGNMENTS_FILE="/etc/vm-state-assignments.json"
 ZFS_POOL="microvms"
-ZFS_DATASET="states"
+ZFS_DATASET="storage/states"
 
 # Colors for output
 RED='\033[0;31m'
