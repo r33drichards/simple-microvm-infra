@@ -34,12 +34,12 @@
 
     # Configure subscribers for borrow/return events
     subscribers = {
-      borrow = {
+      borrow.subscribers.snapshot-manager = {
         post = "http://127.0.0.1:8081/borrow";
         mustSucceed = true;
         async = false;  # Synchronous - wait for snapshot operations
       };
-      return = {
+      return.subscribers.snapshot-manager = {
         post = "http://127.0.0.1:8081/return";
         mustSucceed = true;
         async = false;  # Synchronous - wait for snapshot operations
