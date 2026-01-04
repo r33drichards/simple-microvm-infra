@@ -97,6 +97,15 @@ in
     boot.initrd.postMountCommands = ''
       mkdir -p /mnt-root/persist/nix-state
       mkdir -p /mnt-root/persist/nix-overlay
+
+      # Clean up overlay whiteout files that can corrupt the nix store
+      # Whiteouts are character devices (type c) with major/minor 0:0
+      # They can be created when NixOS activation tries to "remove" paths
+      # that exist in the lower layer (virtiofs), blocking access to real files
+      if [ -d /mnt-root/persist/nix-overlay/store ]; then
+        echo "Cleaning overlay whiteouts..."
+        find /mnt-root/persist/nix-overlay/store -type c -delete 2>/dev/null || true
+      fi
     '';
 
     # Manual bind mount for Nix database (impermanence doesn't support custom mount points)
