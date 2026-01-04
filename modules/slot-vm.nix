@@ -1,7 +1,7 @@
 # modules/slot-vm.nix
 # Minimal VM configuration for portable state architecture
 # Users customize their VMs via nixos-rebuild from inside the VM
-# State (data.img, nix-overlay.img) is just block storage that can be swapped
+# State (data.img) is just block storage that can be swapped
 { config, lib, pkgs, ... }:
 
 {
