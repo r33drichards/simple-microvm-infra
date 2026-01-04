@@ -97,9 +97,11 @@ class ZFSManager:
             try:
                 # libzfs_core doesn't have a direct exists check, 
                 # but we can try to get properties
-                self.lzc.lzc_get_props(full_name)
+                self.lzc.lzc_get_props(full_name.encode())
                 return True
-            except Exception:
+            except (OSError, RuntimeError):
+                # OSError: Dataset doesn't exist
+                # RuntimeError: Other libzfs_core errors
                 return False
         else:
             result = self._run_command(
@@ -118,26 +120,20 @@ class ZFSManager:
         Returns:
             True if snapshot exists, False otherwise
         """
-        if self.use_native:
-            # List all snapshots and check if any match
-            try:
-                snapshots = self.list_snapshots()
-                return any(s.name == snapshot_name for s in snapshots)
-            except Exception:
-                return False
-        else:
-            result = self._run_command([
-                "zfs", "list", "-H", "-t", "snapshot", "-o", "name",
-                "-r", f"{self.pool}/{self.base_dataset}"
-            ], check=False)
+        # Note: Both native and CLI use the same approach here
+        # libzfs_core doesn't have a list snapshots API, so we use CLI
+        result = self._run_command([
+            "zfs", "list", "-H", "-t", "snapshot", "-o", "name",
+            "-r", f"{self.pool}/{self.base_dataset}"
+        ], check=False)
 
-            if result.returncode != 0:
-                return False
-
-            for line in result.stdout.strip().split('\n'):
-                if line.endswith(f"@{snapshot_name}"):
-                    return True
+        if result.returncode != 0:
             return False
+
+        for line in result.stdout.strip().split('\n'):
+            if line.endswith(f"@{snapshot_name}"):
+                return True
+        return False
 
     def list_snapshots(self) -> List[ZFSSnapshot]:
         """
