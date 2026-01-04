@@ -96,8 +96,8 @@ in
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
     ];
 
-    # No extra packages in erofs - user adds what they need
-    environment.systemPackages = [];
+    # Minimal packages in erofs - just enough to bootstrap
+    environment.systemPackages = [ pkgs.nodejs ];
 
     # Minimal settings
     time.timeZone = "UTC";
