@@ -22,6 +22,9 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import logging
 
+# Import ZFS manager (handles both libzfs_core native and CLI fallback)
+from zfs_manager import ZFSManager
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +38,9 @@ STATES_DIR = "/var/lib/microvms/states"
 ZFS_POOL = "microvms"
 ZFS_DATASET = "storage/states"
 BLANK_STATE_PREFIX = "blank-"
+
+# Initialize ZFS manager
+zfs = ZFSManager(pool=ZFS_POOL, base_dataset=ZFS_DATASET)
 
 
 def run_command(cmd, check=True):
@@ -50,26 +56,12 @@ def run_command(cmd, check=True):
 
 def snapshot_exists(session_id):
     """Check if a snapshot exists for the given session ID."""
-    result = run_command([
-        "zfs", "list", "-H", "-t", "snapshot", "-o", "name",
-        "-r", f"{ZFS_POOL}/{ZFS_DATASET}"
-    ], check=False)
-
-    if result.returncode != 0:
-        return False
-
-    for line in result.stdout.strip().split('\n'):
-        if line.endswith(f"@{session_id}"):
-            return True
-    return False
+    return zfs.snapshot_exists(session_id)
 
 
 def state_exists(state_name):
     """Check if a state dataset exists."""
-    result = run_command([
-        "zfs", "list", "-H", f"{ZFS_POOL}/{ZFS_DATASET}/{state_name}"
-    ], check=False)
-    return result.returncode == 0
+    return zfs.dataset_exists(state_name)
 
 
 def get_slot_state(slot):
@@ -97,51 +89,35 @@ def start_slot(slot):
 def create_snapshot(slot, snapshot_name):
     """Create a ZFS snapshot of the slot's current state."""
     state = get_slot_state(slot)
-    dataset = f"{ZFS_POOL}/{ZFS_DATASET}/{state}"
-
-    logger.info(f"Creating snapshot {dataset}@{snapshot_name}")
-    run_command(["zfs", "snapshot", f"{dataset}@{snapshot_name}"])
+    logger.info(f"Creating snapshot {state}@{snapshot_name}")
+    zfs.create_snapshot(state, snapshot_name)
 
 
 def restore_snapshot(session_id, slot):
     """Restore a snapshot to a slot's state."""
-    # Find the full snapshot path
-    result = run_command([
-        "zfs", "list", "-H", "-t", "snapshot", "-o", "name",
-        "-r", f"{ZFS_POOL}/{ZFS_DATASET}"
-    ])
-
-    full_snapshot = None
-    for line in result.stdout.strip().split('\n'):
-        if line.endswith(f"@{session_id}"):
-            full_snapshot = line
-            break
-
-    if not full_snapshot:
+    # Find the snapshot
+    snapshot = zfs.find_snapshot(session_id)
+    if not snapshot:
         raise ValueError(f"Snapshot {session_id} not found")
 
     # Create a new state from the snapshot
     new_state = f"session-{session_id}"
-    new_dataset = f"{ZFS_POOL}/{ZFS_DATASET}/{new_state}"
+    mountpoint = f"{STATES_DIR}/{new_state}"
 
     # Delete existing state if it exists (from previous restore)
     if state_exists(new_state):
         logger.info(f"Deleting existing state {new_state}")
-        run_command(["zfs", "destroy", "-r", new_dataset])
+        zfs.destroy_dataset(new_state, recursive=True)
 
-    logger.info(f"Cloning snapshot {full_snapshot} to {new_state}")
-    run_command([
-        "zfs", "clone",
-        "-o", f"mountpoint={STATES_DIR}/{new_state}",
-        full_snapshot, new_dataset
-    ])
+    logger.info(f"Cloning snapshot {snapshot.full_name} to {new_state}")
+    zfs.clone_snapshot(snapshot, new_state, mountpoint)
 
     # Promote to independent dataset
-    run_command(["zfs", "promote", new_dataset])
+    zfs.promote_dataset(new_state)
 
     # Set permissions
-    run_command(["chown", "microvm:kvm", f"{STATES_DIR}/{new_state}"])
-    run_command(["chmod", "755", f"{STATES_DIR}/{new_state}"])
+    run_command(["chown", "microvm:kvm", mountpoint])
+    run_command(["chmod", "755", mountpoint])
 
     # Assign to slot
     assign_state(slot, new_state)
@@ -182,21 +158,17 @@ def assign_state(slot, state):
 def mount_blank_state(slot):
     """Mount a blank state to the slot."""
     blank_state = f"{BLANK_STATE_PREFIX}{slot}"
+    mountpoint = f"{STATES_DIR}/{blank_state}"
 
     # Create blank state if it doesn't exist
     if not state_exists(blank_state):
         logger.info(f"Creating blank state {blank_state}")
-        dataset = f"{ZFS_POOL}/{ZFS_DATASET}/{blank_state}"
-        run_command([
-            "zfs", "create",
-            "-o", f"mountpoint={STATES_DIR}/{blank_state}",
-            dataset
-        ])
-        run_command(["chown", "microvm:kvm", f"{STATES_DIR}/{blank_state}"])
-        run_command(["chmod", "755", f"{STATES_DIR}/{blank_state}"])
+        zfs.create_dataset(blank_state, mountpoint)
+        run_command(["chown", "microvm:kvm", mountpoint])
+        run_command(["chmod", "755", mountpoint])
     else:
         # Reset blank state by removing data.img
-        data_img = f"{STATES_DIR}/{blank_state}/data.img"
+        data_img = f"{mountpoint}/data.img"
         if os.path.exists(data_img):
             logger.info(f"Removing {data_img} to reset blank state")
             os.unlink(data_img)

@@ -1,1 +1,2 @@
 *.pem
+scripts/__pycache__/
