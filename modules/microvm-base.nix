@@ -1,6 +1,16 @@
 # modules/microvm-base.nix
 # Base configuration shared by all MicroVMs
-# Handles: virtiofs shares, TAP interface, network config, resource allocation
+# Handles: disk volumes, TAP interface, network config, resource allocation
+#
+# Storage Architecture:
+# - /dev/vda: squashfs with VM's Nix closure (read-only, built at deploy time)
+# - /dev/vdb: ext4 root filesystem (64GB, persistent)
+# - /dev/vdc: ext4 writable Nix store overlay (8GB, for nix-env installs)
+#
+# Nix Store:
+# - /nix/.ro-store: squashfs mount (read-only base)
+# - /nix/store: overlay combining ro-store + writable layer
+# - Allows imperative package installs while keeping base closure immutable
 { config, lib, pkgs, ... }:
 
 let
@@ -40,8 +50,15 @@ in
     # Use QEMU (better ARM64 device support)
     microvm.hypervisor = "qemu";
 
-    # Use virtiofs sharing from host instead of creating disk image
-    microvm.storeOnDisk = false;
+    # Use VM-specific squashfs for Nix store (fixes whiteout issue)
+    # This bakes the VM's closure into a read-only disk image
+    microvm.storeOnDisk = true;
+
+    # Enable writable overlay for imperative package installs (nix-env, nix profile)
+    microvm.writableStoreOverlay = "/nix/.rw-store";
+
+    # No virtiofs shares - VMs have independent storage
+    microvm.shares = [];
 
     # Default resource allocation (can be overridden by individual VMs)
     microvm.vcpu = lib.mkDefault config.vmDefaults.vcpu;
@@ -51,72 +68,31 @@ in
     boot.kernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
     boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi" ];
 
-    # Disable systemd in initrd (simpler boot, no impermanence complexity)
+    # Disable systemd in initrd (simpler boot)
     boot.initrd.systemd.enable = false;
 
-    # Allow writes to /nix/store (required for imperative package management)
-    boot.readOnlyNixStore = false;
-
-    # Virtiofs filesystem shares from host
-    # Share /nix/store from host (read-only, space-efficient)
-    # When writableStoreOverlay is set, this becomes the lower layer of the overlay
-    microvm.shares = [{
-      source = "/nix/store";
-      mountPoint = "/nix/.ro-store";
-      tag = "ro-store";
-      proto = "virtiofs";
-    }];
-
-    # Dedicated disk volume per VM (virtio-blk for performance)
-    # Mounted at /persist for persistent state (with impermanence)
+    # Disk volumes
+    # Note: With storeOnDisk=true, squashfs is /dev/vda, volumes start at /dev/vdb
     microvm.volumes = [
       {
-        # Data volume - persistent storage for impermanence
+        # Root filesystem - persistent ext4
         image = "/var/lib/microvms/${config.networking.hostName}/data.img";
         size = 65536;  # 64GB
         autoCreate = true;
         fsType = "ext4";
-        mountPoint = "/persist";
-        label = "${config.networking.hostName}-data";
+        mountPoint = "/";
+        label = "${config.networking.hostName}-root";
+      }
+      {
+        # Writable Nix store overlay - for imperative installs
+        image = "/var/lib/microvms/${config.networking.hostName}/nix-overlay.img";
+        size = 8192;  # 8GB
+        autoCreate = true;
+        fsType = "ext4";
+        mountPoint = "/nix/.rw-store";
+        label = "${config.networking.hostName}-nix-rw";
       }
     ];
-
-    # Root filesystem as tmpfs (ephemeral, cleared on reboot)
-    fileSystems."/" = {
-      device = "tmpfs";
-      fsType = "tmpfs";
-      options = [ "defaults" "size=2G" "mode=755" ];
-    };
-
-    # Mark /persist as needed for boot (required by impermanence module)
-    fileSystems."/persist".neededForBoot = true;
-
-    # Create required directories in /persist during stage 1 boot
-    # This runs after /persist is mounted but before bind mounts happen
-    # Required for fresh volumes (e.g., after reset-storage)
-    boot.initrd.postMountCommands = ''
-      mkdir -p /mnt-root/persist/nix-state
-      mkdir -p /mnt-root/persist/nix-overlay
-
-      # Clean up overlay whiteout files that can corrupt the nix store
-      # Whiteouts are character devices (type c) with major/minor 0:0
-      # They can be created when NixOS activation tries to "remove" paths
-      # that exist in the lower layer (virtiofs), blocking access to real files
-      if [ -d /mnt-root/persist/nix-overlay/store ]; then
-        echo "Cleaning overlay whiteouts..."
-        find /mnt-root/persist/nix-overlay/store -type c -delete 2>/dev/null || true
-      fi
-    '';
-
-    # Manual bind mount for Nix database (impermanence doesn't support custom mount points)
-    # Note: neededForBoot removed - stage 2 will create directory and mount
-    fileSystems."/nix/var" = {
-      depends = [ "/persist" ];
-      device = "/persist/nix-state";
-      fsType = "none";
-      options = [ "bind" ];
-      neededForBoot = false;
-    };
 
     # TAP network interface
     microvm.interfaces = [{
@@ -130,23 +106,17 @@ in
     systemd.network.enable = true;
 
     # Configure first ethernet interface with static IP
-    # Match by type but exclude Docker veth interfaces
     systemd.network.networks."10-lan" = {
       matchConfig = {
         Type = "ether";
         Name = "!veth*";  # Exclude Docker veth interfaces
       };
       networkConfig = {
-        # VM gets .2 in its subnet (gateway is .1 on host)
         Address = "${vmNetwork.subnet}.2/24";
         Gateway = "${vmNetwork.subnet}.1";
-        # Use hypervisor as DNS (runs CoreDNS with allowlist filtering)
-        # All DNS queries are redirected to hypervisor via nftables anyway
         DNS = "${vmNetwork.subnet}.1";
         DHCP = "no";
       };
-      # Route AWS Instance Metadata Service (IMDS) through gateway
-      # Only enabled when microvm.allowIMDS = true (disabled by default for security)
       routes = lib.mkIf config.microvm.allowIMDS [
         {
           routeConfig = {
@@ -161,101 +131,48 @@ in
     time.timeZone = "UTC";
     i18n.defaultLocale = "en_US.UTF-8";
 
-    # Enable Nix experimental features for user-level package management
+    # Nix configuration
     nix.settings = {
       experimental-features = [ "nix-command" "flakes" ];
-      # Don't warn about read-only store
       warn-dirty = false;
-      # Use local flake registry in writable location
       flake-registry = "/etc/nix/registry.json";
+      # Must be false for writableStoreOverlay
+      auto-optimise-store = false;
+    };
+
+    # Weekly garbage collection
+    nix.gc = {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 7d";
     };
 
     # Ensure Nix package is available
     nix.package = pkgs.nix;
 
     # Enable Nix daemon for multi-user Nix operations
-    # Required for imperative package management with overlay store
     systemd.services.nix-daemon = {
-      # Unmask the service (it's masked by default in MicroVMs)
       enable = true;
       wantedBy = [ "multi-user.target" ];
     };
 
-    # Enable writable /nix/store using microvm.nix's built-in overlay feature
-    # This creates an overlay with:
-    # - Lower layer: shared read-only /nix/.ro-store from host (virtiofs)
-    # - Upper layer: writable /persist/nix-overlay/store (on persistent volume)
-    # - Work dir: /persist/nix-overlay/work (on persistent volume)
-    microvm.writableStoreOverlay = "/persist/nix-overlay";
-
-    # Tmpfiles rules to ensure directories exist in /persist
-    systemd.tmpfiles.rules = [
-      "d /persist/nix-state 0755 root root -"
-      "d /persist/nix-overlay 0755 root root -"
-    ];
-
-    # Impermanence configuration - defines what persists across reboots
-    environment.persistence."/persist" = {
-      hideMounts = true;
-      directories = [
-        # System state
-        "/var/log"
-        "/var/lib/systemd"
-        "/var/lib/nixos"
-
-        # Comin GitOps state (git checkout, build state)
-        "/var/lib/comin"
-
-        # Docker (for VMs with Docker enabled)
-        "/var/lib/docker"
-      ];
-      files = [
-        # Machine ID for consistent systemd identity
-        "/etc/machine-id"
-      ];
-      users.robertwendt = {
-        directories = [
-          # User home directory
-          { directory = ".local"; mode = "0755"; }
-          { directory = ".config"; mode = "0755"; }
-          { directory = ".cache"; mode = "0755"; }
-          # Desktop-specific
-          { directory = ".mozilla"; mode = "0755"; }
-          { directory = ".ssh"; mode = "0700"; }
-          # MCP and Claude Code
-          { directory = ".claude"; mode = "0755"; }
-          "Downloads"
-          "Documents"
-          "workspace"
-        ];
-        files = [
-          ".bash_history"
-        ];
-      };
-    };
-
     # Allow root login with password (for learning/setup)
-    # CHANGE THIS in production!
     users.users.root.initialPassword = "nixos";
 
     # SSH keys for root user
     users.users.root.openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
-      # Hypervisor's key - allows SSH from hypervisor to VMs
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII4mlN4JTkdx3C7iBmMF5HporlQygDE2tjN77IE0Ezxn root@hypervisor"
-      # AWS Secrets Manager key (rw-ssh-key) - allows ProxyJump from dev machines
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
     ];
 
-    # Create robertwendt user (same as hypervisor)
+    # Create robertwendt user
     users.users.robertwendt = {
       isNormalUser = true;
       extraGroups = [ "wheel" "docker" ];
       openssh.authorizedKeys.keys = [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
-        # Hypervisor's key - allows SSH from hypervisor to VMs
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGgfMmLS077IliGfXWUHTzI9ZBWFm6Vkn4m+NXvlmmOw root@ip-172-31-22-108.ec2.internal"
-        # AWS Secrets Manager key (rw-ssh-key) - allows ProxyJump from dev machines
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
       ];
     };
@@ -263,16 +180,15 @@ in
     # Disable sudo password for convenience
     security.sudo.wheelNeedsPassword = false;
 
-    # Swap file configuration (4GB on persistent storage)
-    # Helps prevent OOM crashes during memory spikes
+    # Swap file configuration (4GB on root filesystem)
     swapDevices = [{
-      device = "/persist/swapfile";
-      size = 4096;  # 4GB in MB
+      device = "/swapfile";
+      size = 4096;
     }];
 
     # Ensure swap file is created on boot if it doesn't exist
     systemd.services.create-swapfile = {
-      description = "Create swap file on persistent storage";
+      description = "Create swap file on root filesystem";
       wantedBy = [ "swap.target" ];
       before = [ "swap.target" ];
       serviceConfig = {
@@ -281,17 +197,13 @@ in
       };
       script = ''
         set -e
-        SWAPFILE="/persist/swapfile"
-
-        # Only create if it doesn't exist
+        SWAPFILE="/swapfile"
         if [ ! -f "$SWAPFILE" ]; then
           echo "Creating 4GB swap file at $SWAPFILE..."
           ${pkgs.util-linux}/bin/fallocate -l 4G "$SWAPFILE"
           chmod 600 "$SWAPFILE"
           ${pkgs.util-linux}/bin/mkswap "$SWAPFILE"
           echo "Swap file created successfully"
-        else
-          echo "Swap file already exists at $SWAPFILE"
         fi
       '';
     };

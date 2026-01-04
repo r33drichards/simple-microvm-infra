@@ -110,7 +110,7 @@ EOF
     # configure shell to zsh
     isNormalUser = true;  # Required to create home directory
     extraGroups = [ "wheel" ];  # Preserve from base config
-    # Set hashed password for RDP login (works with impermanence)
+    # Set hashed password for RDP login
     # Password: "changeme" - change after first login
     hashedPassword = "$6$9vhPdO0pHckaLgWm$8NPkLKelUAGCjDWTWn7RQ871s4ET3wTpf3zN2vxchyT5MYRkHUbOGXrtwXwMBHReKpLp5syshTLPPn9cid3sI/";
     packages = with pkgs; [

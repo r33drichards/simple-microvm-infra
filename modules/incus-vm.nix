@@ -52,7 +52,7 @@
           name = "default";
           driver = "dir";
           config = {
-            source = "/persist/incus/storage";
+            source = "/var/lib/incus/storage";
           };
         }
       ];
@@ -92,15 +92,9 @@
     ];
   };
 
-  # Create storage directory in persistent storage
+  # Ensure storage directory exists
   systemd.tmpfiles.rules = [
-    "d /persist/incus 0755 root root -"
-    "d /persist/incus/storage 0755 root root -"
-  ];
-
-  # Persist Incus data across reboots (merges with base config)
-  environment.persistence."/persist".directories = [
-    "/var/lib/incus"
+    "d /var/lib/incus/storage 0755 root root -"
   ];
 
   # Useful CLI tools

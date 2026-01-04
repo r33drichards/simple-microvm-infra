@@ -19,13 +19,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Impermanence for ephemeral root filesystem
-    impermanence = {
-      url = "github:nix-community/impermanence";
-    };
   };
 
-  outputs = { self, nixpkgs, microvm, comin, impermanence }:
+  outputs = { self, nixpkgs, microvm, comin }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -136,6 +132,6 @@
       } // vmConfigurations;  # Merge in generated VM configurations
 
       # Export our library function for building MicroVMs
-      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm impermanence comin playwright-mcp; };
+      lib.microvmSystem = import ./lib { inherit self nixpkgs microvm comin playwright-mcp; };
     };
 }

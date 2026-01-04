@@ -7,17 +7,16 @@
   services.k3s = {
     enable = true;
     role = "server";
-    # Store data on persistent volume
     extraFlags = toString [
-      "--data-dir=/persist/k3s"
+      "--data-dir=/var/lib/k3s"
       "--write-kubeconfig-mode=644"
       "--disable=traefik"  # Disable default traefik, can add it later if needed
     ];
   };
 
-  # Ensure k3s data directory exists on persistent storage
+  # Ensure k3s data directory exists
   systemd.tmpfiles.rules = [
-    "d /persist/k3s 0755 root root -"
+    "d /var/lib/k3s 0755 root root -"
   ];
 
   # Open firewall ports for Kubernetes
