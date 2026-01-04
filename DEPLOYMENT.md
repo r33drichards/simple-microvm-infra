@@ -399,6 +399,53 @@ postDeployHook = pkgs.writeShellScript "post-deploy-hook" ''
    - Keep CLAUDE.md updated with architecture changes
    - Maintain this DEPLOYMENT.md with deployment procedures
 
+## VM Deployment
+
+VMs are deployed automatically when the hypervisor configuration is rebuilt. The hypervisor manages VM runners via `microvm@` systemd services.
+
+### Fresh VM Deployment (Clean State)
+
+```bash
+# On hypervisor: Stop VMs and delete disk images
+for vm in vm1 vm2 vm3 vm4 vm5; do
+  systemctl stop microvm@$vm
+  rm -f /var/lib/microvms/$vm/*.img
+done
+
+# Rebuild hypervisor (installs new VM runners)
+cd /root/simple-microvm-infra && git pull
+nixos-rebuild switch --flake .#hypervisor
+
+# Start VMs (new disk images auto-created)
+for vm in vm1 vm2 vm3 vm4 vm5; do
+  systemctl start microvm@$vm
+done
+
+# Create base snapshots after VMs boot
+sleep 60
+for vm in vm1 vm2 vm3 vm4 vm5; do
+  zfs snapshot microvms/storage/$vm@base
+done
+```
+
+### Reset VM to Clean State
+
+```bash
+# Stop, rollback, restart
+systemctl stop microvm@vm1
+zfs rollback microvms/storage/vm1@base
+systemctl start microvm@vm1
+```
+
+### VM Storage Architecture
+
+Each VM has three disk images:
+- **erofs store**: Read-only Nix closure (built at deploy time)
+- **data.img**: 64GB ext4 root filesystem
+- **nix-overlay.img**: 8GB ext4 writable Nix store overlay
+
+The erofs store is rebuilt when the VM configuration changes. The data.img and nix-overlay.img persist until manually deleted or rolled back via ZFS.
+
 ## References
 
 - **Comin GitHub**: https://github.com/nlewo/comin

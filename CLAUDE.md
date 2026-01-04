@@ -49,14 +49,20 @@ ssh -o ProxyJump=root@54.185.189.181 -i ~/.ssh/rw-ssh-key root@10.1.0.2
 ### When asked to "service vm1" (or vm2, vm3, etc.):
 1. SSH through hypervisor: `ssh HYPERVISOR 'ssh VM "command"'`
 2. VM IPs are `10.X.0.2` where X matches the VM number
-3. VMs have impermanence - root is ephemeral, `/persist` survives reboots
+3. VMs have persistent root - everything survives reboots
 4. For config changes, edit `flake.nix` or module files, rebuild VM runner
 
 ### When asked to "deploy" or "update configuration":
 1. Edit Nix files locally
 2. Commit and push to git (Comin will auto-deploy to hypervisor)
 3. Or manually: `nixos-rebuild switch --flake .#hypervisor --target-host root@54.185.189.181`
-4. For VMs: rebuild runner with `nix build .#nixosConfigurations.vmX.config.microvm.declaredRunner`
+4. For VMs: hypervisor rebuild installs new runners automatically
+
+### When asked to "reset a VM to clean state":
+```bash
+# Stop VM, rollback to base snapshot, restart
+ssh HYPERVISOR 'systemctl stop microvm@vmX && zfs rollback microvms/storage/vmX@base && systemctl start microvm@vmX'
+```
 
 ### When asked to "snapshot" or "backup" a VM:
 ```bash
@@ -100,23 +106,25 @@ ssh HYPERVISOR 'zfs rollback microvms/storage/vmX@snapshot-name'
   - Each VM has independent dataset for snapshots
   - Mounted at `/var/lib/microvms`
 
-### VM Storage (Impermanence)
-- **Root (`/`)**: tmpfs (2GB) - **ephemeral, cleared on reboot**
-- **Persistent (`/persist`)**: 64GB ext4 - **survives reboots**
-- **Nix Store**: Overlay on shared virtiofs from hypervisor
+### VM Storage (Persistent Root)
+Each VM has three volumes:
+- **Store (`/dev/vda`)**: erofs (read-only) - VM-specific Nix store closure
+- **Root (`/dev/vdb`)**: 64GB ext4 - **persistent root filesystem**
+- **Nix Overlay (`/dev/vdc`)**: 8GB ext4 - writable layer for `nix-env` installs
+
+The Nix store uses an overlay:
+- **Lower layer**: Read-only erofs with VM's base closure
+- **Upper layer**: Writable ext4 for imperative package installs
 
 ### What Persists in VMs
-- `/var/log`, `/var/lib/systemd`, `/var/lib/nixos`
-- `/etc/machine-id`
-- User home directories (`.config`, `.local`, `.cache`, `.ssh`, etc.)
-- `/var/lib/docker` (for VMs with Docker)
+Everything on the root filesystem persists across reboots. VMs can be reset to a clean state using ZFS snapshots.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `flake.nix` | VM definitions, inputs |
-| `modules/microvm-base.nix` | Base VM config (network, storage, impermanence) |
+| `modules/microvm-base.nix` | Base VM config (network, storage, storeOnDisk) |
 | `modules/desktop-vm.nix` | Desktop VM config (XRDP, Firefox) |
 | `modules/k3s-vm.nix` | Kubernetes VM config |
 | `hosts/hypervisor/default.nix` | Hypervisor config |
@@ -167,6 +175,8 @@ ssh HYPERVISOR 'zpool import microvms'
 
 - **SSH Key**: Always use `~/.ssh/rw-ssh-key` for connections
 - **GitOps**: Hypervisor auto-deploys from git via Comin (checks every 60s)
-- **VMs are ephemeral**: Root filesystem resets on reboot - only `/persist` survives
+- **VMs are persistent**: Root filesystem persists across reboots
+- **VM reset**: Use `zfs rollback microvms/storage/vmX@base` to reset to clean state
 - **ZFS snapshots**: Each VM can be independently snapshotted
 - **ARM64**: This is aarch64-linux, not x86_64
+- **Imperative installs**: VMs support `nix-env` / `nix profile install` via writable overlay
