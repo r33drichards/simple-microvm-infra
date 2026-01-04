@@ -24,9 +24,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # IP allocator webserver for slot pool management
+    ip-allocator = {
+      url = "github:r33drichards/ip-allocator-webserver";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
-  outputs = { self, nixpkgs, microvm, comin }:
+  outputs = { self, nixpkgs, microvm, comin, ip-allocator }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -103,10 +109,12 @@
         # Hypervisor (physical host)
         hypervisor = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
-          specialArgs = { inherit self; };
+          specialArgs = { inherit self ip-allocator; };
           modules = [
             microvm.nixosModules.host  # Enable MicroVM host support
             comin.nixosModules.comin   # GitOps deployment automation
+            ip-allocator.nixosModules.default  # IP allocator for slot pool
+            ./modules/slot-pool-subscriber.nix  # Borrow/return webhook handler
             ./hosts/hypervisor
           ];
         };
@@ -114,5 +122,15 @@
 
       # Export our library function for building MicroVMs
       lib.microvmSystem = import ./lib { inherit self nixpkgs microvm comin playwright-mcp; };
+
+      # Integration tests
+      checks.x86_64-linux.slot-pool = import ./tests/slot-pool-test.nix {
+        pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        lib = nixpkgs.lib;
+      };
+      checks.aarch64-linux.slot-pool = import ./tests/slot-pool-test.nix {
+        pkgs = nixpkgs.legacyPackages.aarch64-linux;
+        lib = nixpkgs.lib;
+      };
     };
 }
