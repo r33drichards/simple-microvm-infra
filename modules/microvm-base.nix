@@ -62,13 +62,14 @@ in
     # Single data volume - state is one file
     # Uses slot directory with symlink to assigned state's data.img
     # The symlink is managed by vm-state CLI
+    # Uses generic label so cloned states work on any slot
     microvm.volumes = [{
       image = "/var/lib/microvms/${config.networking.hostName}/data.img";
       size = 65536;
       autoCreate = true;
       fsType = "ext4";
       mountPoint = "/";
-      label = "${config.networking.hostName}-root";
+      label = "microvm-root";
     }];
 
     # Network
