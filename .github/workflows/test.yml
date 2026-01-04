@@ -1,0 +1,74 @@
+name: NixOS Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: Nix Flake Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Check flake
+        run: nix flake check --no-build
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            system-features = nixos-test benchmark big-parallel kvm
+
+      - name: Setup Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Check KVM availability
+        id: kvm
+        run: |
+          if [ -e /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "KVM is available"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "KVM is not available, tests will run in QEMU emulation mode (slower)"
+          fi
+
+      - name: Run slot-pool integration test
+        run: |
+          # Build and run the integration test
+          # The test uses nixosTest which spawns VMs
+          nix build .#checks.x86_64-linux.slot-pool --print-build-logs
+        env:
+          # Allow more time for VM tests
+          NIX_BUILD_TIMEOUT: 3600
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: result/
+          if-no-files-found: ignore
