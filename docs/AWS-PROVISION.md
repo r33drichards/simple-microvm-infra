@@ -38,7 +38,24 @@ aws ec2 authorize-security-group-ingress \
   --cidr 0.0.0.0/0 2>/dev/null || echo "SSH rule already exists"
 ```
 
-## Step 3: Launch a1.metal Instance with NixOS
+## Step 3: Create IAM Role for EBS Management
+
+The hypervisor needs IAM permissions to manage EBS volumes. Run the setup script:
+
+```bash
+# From the repo directory
+./scripts/setup-hypervisor-iam.sh
+
+# Or specify instance ID after creation:
+./scripts/setup-hypervisor-iam.sh $INSTANCE_ID
+```
+
+This creates:
+- IAM Role: `hypervisor-ebs-role`
+- IAM Policy: `hypervisor-ebs-policy` (allows EC2 volume operations)
+- Instance Profile: `hypervisor-instance-profile`
+
+## Step 4: Launch a1.metal Instance with NixOS
 
 ```bash
 # Latest NixOS 25.05 ARM64 AMI (us-west-2)
@@ -50,7 +67,7 @@ SUBNET_ID=$(aws ec2 describe-subnets \
   --query 'Subnets[0].SubnetId' \
   --output text)
 
-# Launch instance with 500GB root volume
+# Launch instance with 50GB root volume and IAM profile
 INSTANCE_ID=$(aws ec2 run-instances \
   --image-id $AMI_ID \
   --instance-type a1.metal \
@@ -58,7 +75,8 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --subnet-id $SUBNET_ID \
   --associate-public-ip-address \
   --security-group-ids $SG_ID \
-  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":500,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
+  --iam-instance-profile Name=hypervisor-instance-profile \
+  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":50,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=bmnix}]' \
   --query 'Instances[0].InstanceId' \
   --output text)
@@ -79,7 +97,7 @@ echo "Public IP: $PUBLIC_IP"
 echo "SSH command: ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP"
 ```
 
-## Step 4: Wait for Instance to Boot
+## Step 5: Wait for Instance to Boot
 
 ```bash
 # Wait additional time for SSH to be ready
@@ -91,26 +109,35 @@ ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
   -i bm-nixos-us-west-2.pem root@$PUBLIC_IP "echo 'SSH connection successful'"
 ```
 
-## Step 5: Deploy NixOS Configuration
+## Step 6: Deploy NixOS Configuration
+
+The nixos-rebuild can take 10-20 minutes (compiles QEMU). Run it with nohup so it survives SSH disconnection:
 
 ```bash
-# SSH into the instance and deploy
+# Install git and clone repo
 ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP << 'EOF'
-# Install git
 nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#git
-
-# Clone repository
 git clone https://github.com/r33drichards/simple-microvm-infra.git
-cd simple-microvm-infra
-
-# Deploy hypervisor configuration
-nixos-rebuild switch --flake .#hypervisor
-
-echo "Configuration deployed successfully!"
 EOF
+
+# Start build in background with nohup (survives SSH disconnect)
+ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP \
+  'cd /root/simple-microvm-infra && nohup nixos-rebuild switch --flake .#hypervisor > /tmp/rebuild.log 2>&1 &'
+
+# Poll for completion (can disconnect and reconnect)
+echo "Build started. Polling for completion..."
+while ssh -i bm-nixos-us-west-2.pem -o ConnectTimeout=5 root@$PUBLIC_IP \
+  'pgrep nixos-rebuild > /dev/null' 2>/dev/null; do
+  echo "$(date): Still building..."
+  ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP 'tail -1 /tmp/rebuild.log' 2>/dev/null
+  sleep 60
+done
+
+# Check result
+ssh -i bm-nixos-us-west-2.pem root@$PUBLIC_IP 'tail -20 /tmp/rebuild.log'
 ```
 
-## Step 6: Complete MicroVM Setup
+## Step 7: Complete MicroVM Setup
 
 ```bash
 # SSH and complete the setup
@@ -129,6 +156,82 @@ tailscale up --advertise-routes=10.1.0.0/24,10.2.0.0/24,10.3.0.0/24,10.4.0.0/24,
 EOF
 
 echo "Setup complete! Remember to approve Tailscale routes in admin console."
+```
+
+## Agent Context Management
+
+When using Claude Code or other AI agents for provisioning, these techniques prevent context overflow and handle long-running operations:
+
+### 1. Use nohup for Long Builds
+
+Long builds (nixos-rebuild, nix build) should run with nohup so they survive SSH disconnection:
+
+```bash
+# Bad: blocks agent, context fills up, killed on disconnect
+ssh root@$IP 'nixos-rebuild switch --flake .#hypervisor'
+
+# Good: runs independently, poll for completion
+ssh root@$IP 'nohup nixos-rebuild switch --flake .#hypervisor > /tmp/rebuild.log 2>&1 &'
+```
+
+### 2. Poll Log Files Instead of Streaming
+
+Instead of streaming output that fills context, poll periodically:
+
+```bash
+# Check if still running
+ssh root@$IP 'pgrep nixos-rebuild > /dev/null' && echo "Still building..."
+
+# Get last line of progress
+ssh root@$IP 'tail -1 /tmp/rebuild.log'
+
+# Get full output only when done
+ssh root@$IP 'tail -50 /tmp/rebuild.log'
+```
+
+### 3. Use EC2 Console Output for Boot Diagnostics
+
+When SSH is unreachable, check boot status via AWS API (doesn't require SSH):
+
+```bash
+# Check instance status
+aws ec2 describe-instance-status --instance-ids $INSTANCE_ID \
+  --query 'InstanceStatuses[0].{Instance:InstanceStatus.Status,System:SystemStatus.Status}'
+
+# Get console output (boot logs)
+aws ec2 get-console-output --instance-id $INSTANCE_ID \
+  --query 'Output' --output text | tail -50
+```
+
+### 4. Keep Commands Idempotent
+
+Design commands to be safely re-runnable after interruption:
+
+```bash
+# Idempotent: won't fail if already exists
+git clone https://... || (cd repo && git pull)
+mkdir -p /var/lib/microvms
+
+# Idempotent: checks before acting
+pgrep nixos-rebuild || nohup nixos-rebuild switch ... &
+```
+
+### 5. Split Long Operations
+
+Break multi-step operations into separate SSH calls:
+
+```bash
+# Step 1: Install prerequisites (fast)
+ssh root@$IP 'nix profile install nixpkgs#git'
+
+# Step 2: Clone repo (fast)
+ssh root@$IP 'git clone https://...'
+
+# Step 3: Build (slow, use nohup)
+ssh root@$IP 'nohup nixos-rebuild ... &'
+
+# Step 4: Poll until done
+# Step 5: Verify
 ```
 
 ## Troubleshooting

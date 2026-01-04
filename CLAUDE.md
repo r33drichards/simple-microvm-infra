@@ -8,7 +8,7 @@ This document helps Claude Code understand and operate this MicroVM infrastructu
 
 | Machine | IP Address | SSH Command | Role |
 |---------|------------|-------------|------|
-| **Hypervisor** | 34.219.181.99 | `ssh -i ~/.ssh/rw-ssh-key root@34.219.181.99` | Host machine (AWS a1.metal) |
+| **Hypervisor** | 34.218.79.190 | `ssh -i ~/.ssh/rw-ssh-key root@34.218.79.190` | Host machine (AWS a1.metal) |
 | **VM1** | 10.1.0.2 | Via hypervisor (see below) | Desktop VM (XRDP + XFCE) |
 | **VM2** | 10.2.0.2 | Via hypervisor (see below) | Desktop VM (XRDP + XFCE) |
 | **VM3** | 10.3.0.2 | Via hypervisor (see below) | Desktop VM (XRDP + XFCE) |
@@ -19,13 +19,13 @@ This document helps Claude Code understand and operate this MicroVM infrastructu
 
 ```bash
 # Connect to hypervisor
-ssh -i ~/.ssh/rw-ssh-key root@34.219.181.99
+ssh -i ~/.ssh/rw-ssh-key root@34.218.79.190
 
 # Connect to a VM (two-step via hypervisor)
-ssh -i ~/.ssh/rw-ssh-key root@34.219.181.99 'ssh -i /root/.ssh/id_ed25519 root@10.1.0.2 "COMMAND"'
+ssh -i ~/.ssh/rw-ssh-key root@34.218.79.190 'ssh -i /root/.ssh/id_ed25519 root@10.1.0.2 "COMMAND"'
 
 # Or use ProxyJump for interactive session
-ssh -o ProxyJump=root@34.219.181.99 -i ~/.ssh/rw-ssh-key root@10.1.0.2
+ssh -o ProxyJump=root@34.218.79.190 -i ~/.ssh/rw-ssh-key root@10.1.0.2
 ```
 
 ### Common Tasks
@@ -37,12 +37,12 @@ ssh -o ProxyJump=root@34.219.181.99 -i ~/.ssh/rw-ssh-key root@10.1.0.2
 | View VM logs | `ssh HYPERVISOR 'journalctl -u microvm@vm1 -f'` |
 | List ZFS snapshots | `ssh HYPERVISOR 'zfs list -t snapshot'` |
 | Create VM snapshot | `ssh HYPERVISOR 'zfs snapshot microvms/storage/vm1@backup'` |
-| Deploy config | `NIX_SSHOPTS="-i ~/.ssh/rw-ssh-key" nixos-rebuild switch --flake .#hypervisor --target-host root@34.219.181.99` |
+| Deploy config | `NIX_SSHOPTS="-i ~/.ssh/rw-ssh-key" nixos-rebuild switch --flake .#hypervisor --target-host root@34.218.79.190` |
 
 ## Task-Based Instructions
 
 ### When asked to "service the hypervisor" or "work on the host":
-1. SSH to `root@34.219.181.99` using `~/.ssh/rw-ssh-key`
+1. SSH to `root@34.218.79.190` using `~/.ssh/rw-ssh-key`
 2. Check system status: `systemctl status`, `zpool status`, `df -h`
 3. For config changes, edit local files and deploy via `nixos-rebuild`
 
@@ -55,7 +55,7 @@ ssh -o ProxyJump=root@34.219.181.99 -i ~/.ssh/rw-ssh-key root@10.1.0.2
 ### When asked to "deploy" or "update configuration":
 1. Edit Nix files locally
 2. Commit and push to git (Comin will auto-deploy to hypervisor)
-3. Or manually: `nixos-rebuild switch --flake .#hypervisor --target-host root@34.219.181.99`
+3. Or manually: `nixos-rebuild switch --flake .#hypervisor --target-host root@34.218.79.190`
 4. For VMs: rebuild runner with `nix build .#nixosConfigurations.vmX.config.microvm.declaredRunner`
 
 ### When asked to "snapshot" or "backup" a VM:
@@ -74,8 +74,8 @@ ssh HYPERVISOR 'zfs rollback microvms/storage/vmX@snapshot-name'
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ AWS a1.metal - Hypervisor (34.219.181.99)                   │
-│ Region: us-west-2 │ Instance: i-0d7593fccda7e14de           │
+│ AWS a1.metal - Hypervisor (34.218.79.190)                   │
+│ Region: us-west-2 │ Instance: i-02f81409de8ff1c27           │
 │                                                              │
 │  ZFS Pool: microvms (100GB EBS volume)                      │
 │  ├── microvms/storage/vm1  →  /var/lib/microvms/vm1         │
