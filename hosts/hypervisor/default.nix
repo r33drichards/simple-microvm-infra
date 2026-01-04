@@ -33,6 +33,9 @@
 
     # EBS volume management with ZFS
     ../../modules/ebs-volume
+
+    # Slot pool management (ip-allocator + subscriber)
+    ./slot-pool.nix
   ];
 
   # Nix settings
