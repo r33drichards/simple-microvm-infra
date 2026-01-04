@@ -198,6 +198,27 @@ cmd_assign() {
   # Update assignment
   set_slot_state "$slot" "$state"
 
+  # Create symlink from slot's data.img to state's data.img
+  local slot_dir="/var/lib/microvms/${slot}"
+  local slot_data="${slot_dir}/data.img"
+  local state_data="${STATES_DIR}/${state}/data.img"
+
+  # Ensure slot directory exists
+  mkdir -p "$slot_dir"
+  chown microvm:kvm "$slot_dir"
+
+  # Create/update symlink (remove old one if exists)
+  if [[ -L "$slot_data" ]]; then
+    rm "$slot_data"
+  elif [[ -f "$slot_data" ]]; then
+    warn "Existing data.img at $slot_data is a regular file, not a symlink"
+    warn "Moving it to ${slot_data}.backup"
+    mv "$slot_data" "${slot_data}.backup"
+  fi
+
+  ln -s "$state_data" "$slot_data"
+  info "Created symlink: $slot_data -> $state_data"
+
   success "Assigned state '$state' to $slot"
 
   if is_slot_running "$slot"; then
