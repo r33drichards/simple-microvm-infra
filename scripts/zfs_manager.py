@@ -200,6 +200,8 @@ class ZFSManager:
                 logger.info(f"Created dataset {full_name} (native)")
                 return
             except Exception as e:
+                # Broad exception catch is intentional - any native library error
+                # should fall back to CLI for maximum compatibility
                 logger.warning(f"Native create failed, falling back to CLI: {e}")
 
         # CLI fallback
@@ -227,6 +229,8 @@ class ZFSManager:
                 logger.info(f"Created snapshot {full_snapshot} (native)")
                 return
             except Exception as e:
+                # Broad exception catch is intentional - any native library error
+                # should fall back to CLI for maximum compatibility
                 logger.warning(f"Native snapshot failed, falling back to CLI: {e}")
 
         # CLI fallback
@@ -260,6 +264,8 @@ class ZFSManager:
                 logger.info(f"Cloned {snapshot.full_name} to {new_dataset} (native)")
                 return
             except Exception as e:
+                # Broad exception catch is intentional - any native library error
+                # should fall back to CLI for maximum compatibility
                 logger.warning(f"Native clone failed, falling back to CLI: {e}")
 
         # CLI fallback
@@ -285,6 +291,8 @@ class ZFSManager:
                 logger.info(f"Promoted dataset {full_name} (native)")
                 return
             except Exception as e:
+                # Broad exception catch is intentional - any native library error
+                # should fall back to CLI for maximum compatibility
                 logger.warning(f"Native promote failed, falling back to CLI: {e}")
 
         # CLI fallback
@@ -302,13 +310,15 @@ class ZFSManager:
         full_name = f"{self.pool}/{self.base_dataset}/{dataset_name}"
 
         if self.use_native and not recursive:
-            # libzfs_core.lzc_destroy only supports non-recursive destroy
-            # For recursive, we must use CLI
+            # Note: libzfs_core.lzc_destroy only supports non-recursive destroy
+            # Recursive destroys always use CLI fallback
             try:
                 self.lzc.lzc_destroy(full_name.encode())
                 logger.info(f"Destroyed dataset {full_name} (native)")
                 return
             except Exception as e:
+                # Broad exception catch is intentional - any native library error
+                # should fall back to CLI for maximum compatibility
                 logger.warning(f"Native destroy failed, falling back to CLI: {e}")
 
         # CLI fallback (or for recursive destroys)
