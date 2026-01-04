@@ -127,10 +127,14 @@
       checks.x86_64-linux.slot-pool = import ./tests/slot-pool-test.nix {
         pkgs = nixpkgs.legacyPackages.x86_64-linux;
         lib = nixpkgs.lib;
+        inherit ip-allocator;
+        slotPoolSubscriberModule = ./modules/slot-pool-subscriber.nix;
       };
       checks.aarch64-linux.slot-pool = import ./tests/slot-pool-test.nix {
         pkgs = nixpkgs.legacyPackages.aarch64-linux;
         lib = nixpkgs.lib;
+        inherit ip-allocator;
+        slotPoolSubscriberModule = ./modules/slot-pool-subscriber.nix;
       };
     };
 }

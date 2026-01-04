@@ -1,109 +1,106 @@
 # tests/slot-pool-test.nix
 # NixOS integration test for the slot pool system
 #
-# Tests the end-to-end flow:
-# 1. ip-allocator and slot-pool-subscriber services start
-# 2. Slots can be submitted to the pool
-# 3. Slots can be borrowed with sessionId parameter
-# 4. Slots can be returned with snapshot creation
-# 5. Re-borrowing with same sessionId restores the snapshot
-{ pkgs, lib, ... }:
+# Tests the full e2e flow using the actual deployed configuration:
+# 1. ip-allocator-webserver receives borrow/return requests
+# 2. ip-allocator calls slot-pool-subscriber webhooks
+# 3. slot-pool-subscriber manages snapshots (mocked ZFS in test)
+# 4. Data flows correctly through the entire system
+{ pkgs, lib, ip-allocator, slotPoolSubscriberModule, ... }:
 
 let
-  # Mock slot-pool-subscriber that doesn't require ZFS
-  # Tests the HTTP interface and ip-allocator integration
-  mockSubscriberScript = pkgs.writeScriptBin "mock-slot-pool-subscriber" ''
-    #!${pkgs.python3}/bin/python3
-    import json
-    import os
-    from http.server import HTTPServer, BaseHTTPRequestHandler
+  system = pkgs.system;
 
-    # Simple in-memory state for testing
-    snapshots = {}
-    slot_states = {}
+  # Create mock scripts for ZFS and systemctl that log operations
+  # and simulate success for testing the integration
+  mockScripts = pkgs.runCommand "mock-scripts" {} ''
+    mkdir -p $out/bin
 
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, format, *args):
-            pass  # Suppress logging
+    # Mock ZFS - logs operations and simulates state
+    cat > $out/bin/zfs << 'EOF'
+#!/bin/sh
+echo "MOCK ZFS: $@" >> /tmp/zfs-operations.log
 
-        def send_json(self, code, data):
-            self.send_response(code)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(data).encode())
+case "$1" in
+  list)
+    # Return mock snapshot list
+    if [ "$2" = "-H" ] && [ "$3" = "-t" ] && [ "$4" = "snapshot" ]; then
+      cat /tmp/zfs-snapshots.txt 2>/dev/null || true
+    elif [ "$2" = "-H" ]; then
+      # Check if dataset exists
+      dataset="$3"
+      if grep -q "^$dataset$" /tmp/zfs-datasets.txt 2>/dev/null; then
+        echo "$dataset"
+        exit 0
+      else
+        exit 1
+      fi
+    fi
+    ;;
+  snapshot)
+    # Record snapshot creation
+    echo "$2" >> /tmp/zfs-snapshots.txt
+    ;;
+  create)
+    # Record dataset creation
+    shift
+    while [ $# -gt 1 ]; do shift; done
+    echo "$1" >> /tmp/zfs-datasets.txt
+    ;;
+  clone)
+    shift
+    while [ $# -gt 1 ]; do shift; done
+    echo "$1" >> /tmp/zfs-datasets.txt
+    ;;
+  promote|destroy)
+    # Just log, no action needed
+    ;;
+esac
+exit 0
+EOF
+    chmod +x $out/bin/zfs
 
-        def do_GET(self):
-            if self.path == '/health':
-                self.send_json(200, {"status": "healthy"})
-            elif self.path == '/debug/state':
-                self.send_json(200, {"snapshots": snapshots, "slot_states": slot_states})
-            else:
-                self.send_json(404, {"error": "Not found"})
+    # Mock systemctl - logs operations
+    cat > $out/bin/systemctl << 'EOF'
+#!/bin/sh
+echo "MOCK SYSTEMCTL: $@" >> /tmp/systemctl-operations.log
+# Always succeed for start/stop/restart
+exit 0
+EOF
+    chmod +x $out/bin/systemctl
 
-        def do_POST(self):
-            try:
-                content_length = int(self.headers.get('Content-Length', 0))
-                body = self.rfile.read(content_length)
-                data = json.loads(body) if body else {}
-
-                item = data.get('item', {})
-                params = data.get('params', {})
-                slot = item.get('id')
-                session_id = params.get('sessionId')
-
-                if not slot or not session_id:
-                    self.send_json(400, {"error": "Missing slot id or sessionId"})
-                    return
-
-                if self.path == '/borrow':
-                    # Simulate borrow: check for existing snapshot
-                    if session_id in snapshots:
-                        slot_states[slot] = f"restored-{session_id}"
-                        self.send_json(200, {
-                            "status": "success",
-                            "message": f"Restored snapshot {session_id} to {slot}",
-                            "restored": True
-                        })
-                    else:
-                        slot_states[slot] = f"fresh-{session_id}"
-                        self.send_json(200, {
-                            "status": "success",
-                            "message": f"Created fresh state for {slot}",
-                            "restored": False
-                        })
-
-                elif self.path == '/return':
-                    # Simulate return: save snapshot
-                    current_state = slot_states.get(slot, "unknown")
-                    snapshots[session_id] = {
-                        "slot": slot,
-                        "previous_state": current_state
-                    }
-                    slot_states[slot] = "blank"
-                    self.send_json(200, {
-                        "status": "success",
-                        "message": f"Snapshot {session_id} created, {slot} reset to blank"
-                    })
-                else:
-                    self.send_json(404, {"error": f"Unknown endpoint: {self.path}"})
-
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
-            except Exception as e:
-                self.send_json(500, {"error": str(e)})
-
-    port = int(os.environ.get('PORT', 8081))
-    host = os.environ.get('HOST', '127.0.0.1')
-    server = HTTPServer((host, port), Handler)
-    print(f"Mock subscriber listening on {host}:{port}")
-    server.serve_forever()
+    # Mock chown/chmod for ZFS directory setup
+    cat > $out/bin/mock-chown << 'EOF'
+#!/bin/sh
+exit 0
+EOF
+    chmod +x $out/bin/mock-chown
   '';
-in
-pkgs.nixosTest {
+
+in pkgs.nixosTest {
   name = "slot-pool-integration";
 
   nodes.server = { config, pkgs, ... }: {
+    imports = [
+      ip-allocator.nixosModules.default
+      slotPoolSubscriberModule
+    ];
+
     virtualisation.memorySize = 2048;
+
+    # Create mock directories and initial state
+    systemd.tmpfiles.rules = [
+      "d /var/lib/microvms 0755 root root -"
+      "d /var/lib/microvms/states 0755 root root -"
+      "d /var/lib/microvms/states/slot1 0755 root root -"
+      "d /var/lib/microvms/states/slot2 0755 root root -"
+      "d /var/lib/microvms/states/slot3 0755 root root -"
+      "f /tmp/zfs-snapshots.txt 0644 root root -"
+      "f /tmp/zfs-datasets.txt 0644 root root - microvms/storage/states/slot1\nmicrovms/storage/states/slot2\nmicrovms/storage/states/slot3"
+      "f /tmp/zfs-operations.log 0644 root root -"
+      "f /tmp/systemctl-operations.log 0644 root root -"
+      "f /etc/vm-state-assignments.json 0644 root root - {}"
+    ];
 
     # Redis for ip-allocator
     services.redis.servers.ip-allocator = {
@@ -112,20 +109,48 @@ pkgs.nixosTest {
       bind = "127.0.0.1";
     };
 
-    # Mock subscriber service
-    systemd.services.mock-slot-pool-subscriber = {
-      description = "Mock Slot Pool Subscriber for testing";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+    # Slot pool subscriber with mock commands in PATH
+    services.slotPoolSubscriber = {
+      enable = true;
+      port = 8081;
+      address = "127.0.0.1";
+    };
+
+    # Override subscriber service to use mock ZFS/systemctl
+    systemd.services.slot-pool-subscriber = {
+      path = [ mockScripts pkgs.coreutils ];
       environment = {
-        PORT = "8081";
-        HOST = "127.0.0.1";
+        PATH = lib.mkForce "${mockScripts}/bin:${pkgs.coreutils}/bin:${pkgs.util-linux}/bin";
       };
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = "${mockSubscriberScript}/bin/mock-slot-pool-subscriber";
-        Restart = "always";
+    };
+
+    # IP allocator webserver - same config as production
+    services.ip-allocator-webserver = {
+      enable = true;
+      package = ip-allocator.packages.${system}.default;
+      port = 8000;
+      address = "0.0.0.0";
+      redisUrl = "redis://127.0.0.1:6379";
+
+      # Same subscriber config as production
+      subscribers = {
+        borrow.subscribers.snapshot-manager = {
+          post = "http://127.0.0.1:8081/borrow";
+          mustSucceed = true;
+          async = false;
+        };
+        return.subscribers.snapshot-manager = {
+          post = "http://127.0.0.1:8081/return";
+          mustSucceed = true;
+          async = false;
+        };
       };
+    };
+
+    # Ensure proper service ordering
+    systemd.services.ip-allocator-webserver = {
+      after = [ "slot-pool-subscriber.service" "redis-ip-allocator.service" ];
+      requires = [ "slot-pool-subscriber.service" "redis-ip-allocator.service" ];
     };
 
     environment.systemPackages = with pkgs; [
@@ -133,7 +158,7 @@ pkgs.nixosTest {
       jq
     ];
 
-    networking.firewall.allowedTCPPorts = [ 8081 ];
+    networking.firewall.allowedTCPPorts = [ 8000 8081 ];
   };
 
   testScript = ''
@@ -141,112 +166,129 @@ pkgs.nixosTest {
 
     start_all()
 
-    # Wait for services to be ready
+    # Wait for all services to be ready
     server.wait_for_unit("redis-ip-allocator.service")
-    server.wait_for_unit("mock-slot-pool-subscriber.service")
+    server.wait_for_unit("slot-pool-subscriber.service")
+    server.wait_for_unit("ip-allocator-webserver.service")
+    server.wait_for_open_port(6379)
     server.wait_for_open_port(8081)
+    server.wait_for_open_port(8000)
 
-    # Test 1: Health check endpoint
-    with subtest("Health check endpoint works"):
+    # Test 1: Verify services are running
+    with subtest("All services are running"):
+        server.succeed("systemctl is-active redis-ip-allocator.service")
+        server.succeed("systemctl is-active slot-pool-subscriber.service")
+        server.succeed("systemctl is-active ip-allocator-webserver.service")
+
+    # Test 2: Health check on subscriber
+    with subtest("Subscriber health check works"):
         result = server.succeed("curl -sf http://127.0.0.1:8081/health")
         health = json.loads(result)
-        assert health["status"] == "healthy", f"Expected healthy status, got {health}"
+        assert health["status"] == "healthy", f"Expected healthy, got {health}"
 
-    # Test 2: First borrow creates fresh state (no existing snapshot)
-    with subtest("First borrow creates fresh state"):
-        payload = json.dumps({
-            "item": {"id": "slot1", "execUrl": "http://10.1.0.2:8080"},
-            "params": {"sessionId": "session-abc123"}
-        })
+    # Test 3: Submit slots to the pool
+    with subtest("Submit slots to pool"):
+        for slot in ["slot1", "slot2", "slot3"]:
+            server.succeed(f"curl -sf -X POST 'http://127.0.0.1:8000/ip/submit?ip={slot}'")
+
+        # Verify pool has 3 free items
+        result = server.succeed("curl -sf http://127.0.0.1:8000/admin/stats")
+        stats = json.loads(result)
+        assert stats["free"] == 3, f"Expected 3 free items, got {stats}"
+
+    # Test 4: Borrow a slot with sessionId (first time - no existing snapshot)
+    with subtest("Borrow slot creates fresh state for new session"):
         result = server.succeed(
-            f"curl -sf -X POST -H 'Content-Type: application/json' "
-            f"-d '{payload}' http://127.0.0.1:8081/borrow"
+            "curl -sf -X GET 'http://127.0.0.1:8000/ip/borrow?sessionId=test-session-123'"
         )
-        response = json.loads(result)
-        assert response["status"] == "success", f"Expected success, got {response}"
-        assert response["restored"] == False, "Should not restore on first borrow"
+        borrow_response = json.loads(result)
+        assert "item" in borrow_response, f"Expected item in response, got {borrow_response}"
+        assert "token" in borrow_response, f"Expected token in response, got {borrow_response}"
 
-    # Test 3: Return creates snapshot
-    with subtest("Return creates snapshot"):
-        payload = json.dumps({
-            "item": {"id": "slot1", "execUrl": "http://10.1.0.2:8080"},
-            "params": {"sessionId": "session-abc123"}
-        })
+        borrowed_slot = borrow_response["item"]
+        borrow_token = borrow_response["token"]
+
+        # Verify pool now has 2 free items
+        result = server.succeed("curl -sf http://127.0.0.1:8000/admin/stats")
+        stats = json.loads(result)
+        assert stats["free"] == 2, f"Expected 2 free items, got {stats}"
+        assert stats["borrowed"] == 1, f"Expected 1 borrowed, got {stats}"
+
+    # Test 5: Verify subscriber was called (check ZFS operations log)
+    with subtest("Subscriber processed borrow webhook"):
+        zfs_log = server.succeed("cat /tmp/zfs-operations.log")
+        assert "zfs" in zfs_log.lower() or "MOCK ZFS" in zfs_log, \
+            f"Expected ZFS operations, got: {zfs_log}"
+
+    # Test 6: Return the slot (creates snapshot for session)
+    with subtest("Return slot creates snapshot"):
         result = server.succeed(
-            f"curl -sf -X POST -H 'Content-Type: application/json' "
-            f"-d '{payload}' http://127.0.0.1:8081/return"
+            f"curl -sf -X POST 'http://127.0.0.1:8000/ip/return?token={borrow_token}&sessionId=test-session-123'"
         )
-        response = json.loads(result)
-        assert response["status"] == "success", f"Expected success, got {response}"
 
-    # Test 4: Verify snapshot was created
-    with subtest("Snapshot exists after return"):
-        result = server.succeed("curl -sf http://127.0.0.1:8081/debug/state")
-        state = json.loads(result)
-        assert "session-abc123" in state["snapshots"], \
-            f"Snapshot should exist, state: {state}"
+        # Verify pool now has 3 free items again
+        result = server.succeed("curl -sf http://127.0.0.1:8000/admin/stats")
+        stats = json.loads(result)
+        assert stats["free"] == 3, f"Expected 3 free items, got {stats}"
+        assert stats["borrowed"] == 0, f"Expected 0 borrowed, got {stats}"
 
-    # Test 5: Second borrow restores existing snapshot
-    with subtest("Second borrow restores snapshot"):
-        payload = json.dumps({
-            "item": {"id": "slot2", "execUrl": "http://10.2.0.2:8080"},
-            "params": {"sessionId": "session-abc123"}
-        })
+    # Test 7: Verify snapshot was created
+    with subtest("Snapshot was created on return"):
+        snapshots = server.succeed("cat /tmp/zfs-snapshots.txt")
+        assert "test-session-123" in snapshots, \
+            f"Expected snapshot for test-session-123, got: {snapshots}"
+
+    # Test 8: Borrow again with same sessionId (should restore snapshot)
+    with subtest("Borrow with existing session restores snapshot"):
         result = server.succeed(
-            f"curl -sf -X POST -H 'Content-Type: application/json' "
-            f"-d '{payload}' http://127.0.0.1:8081/borrow"
+            "curl -sf -X GET 'http://127.0.0.1:8000/ip/borrow?sessionId=test-session-123'"
         )
-        response = json.loads(result)
-        assert response["status"] == "success", f"Expected success, got {response}"
-        assert response["restored"] == True, "Should restore existing snapshot"
+        borrow_response = json.loads(result)
+        second_token = borrow_response["token"]
 
-    # Test 6: Borrow with new session creates fresh state
-    with subtest("Borrow with new session creates fresh state"):
-        payload = json.dumps({
-            "item": {"id": "slot3", "execUrl": "http://10.3.0.2:8080"},
-            "params": {"sessionId": "session-new-xyz"}
-        })
-        result = server.succeed(
-            f"curl -sf -X POST -H 'Content-Type: application/json' "
-            f"-d '{payload}' http://127.0.0.1:8081/borrow"
+        # Check ZFS log shows clone/restore operation
+        zfs_log = server.succeed("cat /tmp/zfs-operations.log")
+        # Should see clone operation for restoring snapshot
+        assert "clone" in zfs_log.lower() or "MOCK ZFS: clone" in zfs_log, \
+            f"Expected clone operation for restore, got: {zfs_log}"
+
+    # Test 9: Verify systemctl was called to restart slots
+    with subtest("Systemctl was called to manage slot lifecycle"):
+        systemctl_log = server.succeed("cat /tmp/systemctl-operations.log")
+        assert "stop" in systemctl_log.lower() or "start" in systemctl_log.lower(), \
+            f"Expected start/stop operations, got: {systemctl_log}"
+
+    # Test 10: Return second borrow
+    with subtest("Return second borrow succeeds"):
+        server.succeed(
+            f"curl -sf -X POST 'http://127.0.0.1:8000/ip/return?token={second_token}&sessionId=test-session-123'"
         )
-        response = json.loads(result)
-        assert response["status"] == "success", f"Expected success, got {response}"
-        assert response["restored"] == False, "Should not restore for new session"
 
-    # Test 7: Invalid payload is rejected
-    with subtest("Invalid payload returns 400"):
-        result = server.succeed(
-            "curl -s -o /dev/null -w '%{http_code}' -X POST "
-            "-H 'Content-Type: application/json' "
-            "-d '{}' http://127.0.0.1:8081/borrow"
+        result = server.succeed("curl -sf http://127.0.0.1:8000/admin/stats")
+        stats = json.loads(result)
+        assert stats["free"] == 3, f"Expected 3 free items, got {stats}"
+
+    # Test 11: Multiple sessions work independently
+    with subtest("Multiple sessions work independently"):
+        # Borrow with session A
+        result_a = server.succeed(
+            "curl -sf -X GET 'http://127.0.0.1:8000/ip/borrow?sessionId=session-A'"
         )
-        assert result.strip() == "400", f"Expected 400, got {result}"
+        token_a = json.loads(result_a)["token"]
 
-    # Test 8: Unknown endpoint returns 404
-    with subtest("Unknown endpoint returns 404"):
-        result = server.succeed(
-            "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/unknown"
+        # Borrow with session B
+        result_b = server.succeed(
+            "curl -sf -X GET 'http://127.0.0.1:8000/ip/borrow?sessionId=session-B'"
         )
-        assert result.strip() == "404", f"Expected 404, got {result}"
+        token_b = json.loads(result_b)["token"]
 
-    # Test 9: Multiple concurrent sessions
-    with subtest("Multiple concurrent sessions work independently"):
-        # Create two different sessions
-        for session_id, slot in [("session-A", "slot1"), ("session-B", "slot2")]:
-            payload = json.dumps({
-                "item": {"id": slot},
-                "params": {"sessionId": session_id}
-            })
-            server.succeed(
-                f"curl -sf -X POST -H 'Content-Type: application/json' "
-                f"-d '{payload}' http://127.0.0.1:8081/return"
-            )
+        # Return both
+        server.succeed(f"curl -sf -X POST 'http://127.0.0.1:8000/ip/return?token={token_a}&sessionId=session-A'")
+        server.succeed(f"curl -sf -X POST 'http://127.0.0.1:8000/ip/return?token={token_b}&sessionId=session-B'")
 
         # Verify both snapshots exist
-        result = server.succeed("curl -sf http://127.0.0.1:8081/debug/state")
-        state = json.loads(result)
-        assert "session-A" in state["snapshots"], "session-A snapshot should exist"
-        assert "session-B" in state["snapshots"], "session-B snapshot should exist"
+        snapshots = server.succeed("cat /tmp/zfs-snapshots.txt")
+        assert "session-A" in snapshots, "Expected snapshot for session-A"
+        assert "session-B" in snapshots, "Expected snapshot for session-B"
   '';
 }
