@@ -94,26 +94,18 @@ in
     # Disable systemd in initrd (simpler boot)
     boot.initrd.systemd.enable = false;
 
-    # Disk volumes - paths reference state dataset
-    # Note: With storeOnDisk=true, squashfs is /dev/vda, volumes start at /dev/vdb
+    # Single disk volume - state is just one block device
+    # Note: With storeOnDisk=true, squashfs is /dev/vda, data volume is /dev/vdb
     microvm.volumes = [
       {
         # Root filesystem - persistent ext4 from state dataset
+        # Nix overlay (/nix/.rw-store) lives on this filesystem
         image = "/var/lib/microvms/states/${stateName}/data.img";
         size = 65536;  # 64GB
         autoCreate = true;
         fsType = "ext4";
         mountPoint = "/";
         label = "${stateName}-root";
-      }
-      {
-        # Writable Nix store overlay - for imperative installs
-        image = "/var/lib/microvms/states/${stateName}/nix-overlay.img";
-        size = 8192;  # 8GB
-        autoCreate = true;
-        fsType = "ext4";
-        mountPoint = "/nix/.rw-store";
-        label = "${stateName}-nix-rw";
       }
     ];
 

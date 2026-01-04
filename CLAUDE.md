@@ -159,14 +159,13 @@ ssh HYPERVISOR 'systemctl stop microvm@slot1 && rm /var/lib/microvms/states/slot
   - Each state is a ZFS dataset for independent snapshots
 
 ### Slot Storage (Portable States)
-Each slot mounts a state's volumes:
-- **Store (`/dev/vda`)**: erofs (read-only) - unified Nix store closure
-- **Root (`/dev/vdb`)**: 64GB ext4 - **persistent root filesystem** (from state)
-- **Nix Overlay (`/dev/vdc`)**: 8GB ext4 - writable layer (from state)
+Each slot mounts a state's data.img:
+- **Store (`/dev/vda`)**: erofs (read-only) - minimal Nix store closure
+- **Root (`/dev/vdb`)**: 64GB ext4 - **persistent root filesystem** (state = this one file)
 
 The Nix store uses an overlay:
-- **Lower layer**: Read-only erofs with unified base closure
-- **Upper layer**: Writable ext4 for imperative package installs
+- **Lower layer**: Read-only erofs with minimal base closure
+- **Upper layer**: /nix/.rw-store directory on root filesystem
 
 ### What's Portable (in State)
 - Root filesystem files and directories
