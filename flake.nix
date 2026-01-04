@@ -35,32 +35,14 @@
       playwright-mcp = pkgs.callPackage ./pkgs/playwright-mcp {};
 
       # Slot definitions - each slot is a fixed network identity
-      # States (persistent data) can be assigned to any slot
-      #
-      # Default state names match slot names for simplicity:
-      #   slot1 uses state "slot1", slot2 uses state "slot2", etc.
-      #
-      # To run a different state on a slot, use the vm-state CLI:
-      #   vm-state assign slot1 my-custom-state
+      # Slots are minimal NixOS - users customize via nixos-rebuild inside VM
+      # States are just block storage that can be snapshotted and swapped
       slots = {
-        slot1 = {
-          # All slots use the unified slot-vm module
-          modules = [ ./modules/slot-vm.nix ];
-        };
-        slot2 = {
-          modules = [ ./modules/slot-vm.nix ];
-        };
-        slot3 = {
-          modules = [ ./modules/slot-vm.nix ];
-        };
-        slot4 = {
-          modules = [ ./modules/slot-vm.nix ];
-          # Extra resources for heavier workloads
-          config = { microvm.mem = 4096; microvm.vcpu = 2; };
-        };
-        slot5 = {
-          modules = [ ./modules/slot-vm.nix ];
-        };
+        slot1 = {};
+        slot2 = {};
+        slot3 = {};
+        slot4 = { config = { microvm.mem = 4096; microvm.vcpu = 2; }; };
+        slot5 = {};
       };
 
       # Generate nixosConfiguration for each slot
