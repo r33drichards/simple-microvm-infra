@@ -38,11 +38,11 @@
       # Slots are minimal NixOS - users customize via nixos-rebuild inside VM
       # States are just block storage that can be snapshotted and swapped
       slots = {
-        slot1 = {};
-        slot2 = {};
-        slot3 = {};
-        slot4 = { config = { microvm.mem = 4096; microvm.vcpu = 2; }; };
-        slot5 = {};
+        slot1 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot2 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot3 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot4 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot5 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
       };
 
       # Generate nixosConfiguration for each slot
