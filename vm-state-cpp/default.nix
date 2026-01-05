@@ -6,6 +6,7 @@
 , zfs
 , util-linux
 , libtirpc
+, zlib
 }:
 
 stdenv.mkDerivation rec {
@@ -24,6 +25,7 @@ stdenv.mkDerivation rec {
     zfs  # Provides libzfs and libnvpair
     util-linux  # Provides blkid, required by libzfs pkg-config
     libtirpc  # Required by libzfs pkg-config
+    zlib  # Required by libzfs_core pkg-config
   ];
 
   cmakeFlags = [

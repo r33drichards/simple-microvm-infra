@@ -9,34 +9,44 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SYSTEMD REQUIRED libsystemd)
 pkg_check_modules(LIBZFS REQUIRED libzfs)
-pkg_check_modules(LIBNVPAIR REQUIRED libnvpair)
+# Note: libnvpair is included with libzfs, no separate pkg-config needed
 
-# Include directories
-include_directories(${CMAKE_SOURCE_DIR}/include)
-include_directories(${SYSTEMD_INCLUDE_DIRS})
-include_directories(${LIBZFS_INCLUDE_DIRS})
-include_directories(${LIBNVPAIR_INCLUDE_DIRS})
+# Create a static library for ZFS-dependent code
+# This isolates the ZFS includes (which conflict with systemd headers) from the rest
+add_library(zfs_provider STATIC
+    src/providers/state_provider.cpp
+    src/providers/zfs_state_provider.cpp
+)
+target_include_directories(zfs_provider PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${LIBZFS_INCLUDE_DIRS}
+)
+target_link_libraries(zfs_provider PRIVATE ${LIBZFS_LIBRARIES})
 
-# Source files
-set(SOURCES
+# Main sources that use systemd (no ZFS includes here)
+set(MAIN_SOURCES
     src/main.cpp
     src/providers/vm_provider.cpp
     src/providers/systemd_dbus_vm_provider.cpp
-    src/providers/state_provider.cpp
-    src/providers/zfs_state_provider.cpp
     src/cli/cli.cpp
     src/utils/exec.cpp
     src/utils/json.cpp
 )
 
 # Create executable
-add_executable(vm-state ${SOURCES})
+add_executable(vm-state ${MAIN_SOURCES})
+
+# Include directories for main sources (no ZFS - avoids header conflicts)
+target_include_directories(vm-state PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SYSTEMD_INCLUDE_DIRS}
+)
 
 # Link libraries
 target_link_libraries(vm-state
+    zfs_provider
     ${SYSTEMD_LIBRARIES}
     ${LIBZFS_LIBRARIES}
-    ${LIBNVPAIR_LIBRARIES}
 )
 
 # Install

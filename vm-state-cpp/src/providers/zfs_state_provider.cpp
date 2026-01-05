@@ -634,16 +634,18 @@ std::vector<SnapshotInfo> ZFSStateProvider::list_snapshots(
 
     // If listing for a specific state, just iterate its snapshots
     // Otherwise, iterate all filesystems and their snapshots
+    // Note: zfs_iter_snapshots takes (handle, simple, callback, data, min_txg, max_txg)
+    // Use 0, 0 to iterate all snapshots without txg filtering
     if (!state_name.empty()) {
-        zfs_iter_snapshots(zhp, B_FALSE, snapshot_iter_callback, &collector);
+        zfs_iter_snapshots(zhp, B_FALSE, snapshot_iter_callback, &collector, 0, 0);
     } else {
         // Need to iterate all child filesystems and their snapshots
-        zfs_iter_snapshots(zhp, B_FALSE, snapshot_iter_callback, &collector);
+        zfs_iter_snapshots(zhp, B_FALSE, snapshot_iter_callback, &collector, 0, 0);
 
         // Also iterate child filesystems
         auto iter_children = [](zfs_handle_t* child_zhp, void* data) -> int {
             auto* coll = static_cast<SnapshotCollector*>(data);
-            zfs_iter_snapshots(child_zhp, B_FALSE, snapshot_iter_callback, data);
+            zfs_iter_snapshots(child_zhp, B_FALSE, snapshot_iter_callback, data, 0, 0);
             zfs_close(child_zhp);
             return 0;
         };
