@@ -3,6 +3,7 @@
 , cmake
 , pkg-config
 , systemd
+, zfs
 }:
 
 stdenv.mkDerivation rec {
@@ -18,6 +19,7 @@ stdenv.mkDerivation rec {
 
   buildInputs = [
     systemd
+    zfs  # Provides libzfs and libnvpair
   ];
 
   cmakeFlags = [
@@ -25,7 +27,7 @@ stdenv.mkDerivation rec {
   ];
 
   meta = with lib; {
-    description = "Manage portable VM states with ZFS and systemd";
+    description = "Manage portable VM states with ZFS and systemd using libzfs";
     homepage = "https://github.com/r33drichards/simple-microvm-infra";
     license = licenses.mit;
     maintainers = [ ];

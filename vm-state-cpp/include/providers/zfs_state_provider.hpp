@@ -2,13 +2,15 @@
 
 #include "state_provider.hpp"
 #include <map>
+#include <libzfs.h>
 
 namespace vmstate {
 
 /**
- * ZFSStateProvider - State/snapshot management via ZFS
+ * ZFSStateProvider - State/snapshot management via libzfs
  *
  * Uses ZFS datasets for states and ZFS snapshots for point-in-time captures.
+ * Interfaces directly with libzfs for better performance and error handling.
  */
 class ZFSStateProvider : public StateProvider {
 public:
@@ -28,7 +30,11 @@ public:
         const std::vector<std::string>& slots = {"slot1", "slot2", "slot3", "slot4", "slot5"}
     );
 
-    ~ZFSStateProvider() override = default;
+    ~ZFSStateProvider() override;
+
+    // Prevent copying (libzfs handle is not copyable)
+    ZFSStateProvider(const ZFSStateProvider&) = delete;
+    ZFSStateProvider& operator=(const ZFSStateProvider&) = delete;
 
     // State management
     bool create_state(const std::string& name) override;
@@ -64,6 +70,11 @@ public:
 
 private:
     /**
+     * Initialize libzfs handle
+     */
+    bool init_libzfs();
+
+    /**
      * Get full dataset path for a state
      */
     std::string get_dataset_path(const std::string& state_name) const;
@@ -74,20 +85,12 @@ private:
     std::string get_mount_path(const std::string& state_name) const;
 
     /**
-     * Execute a ZFS command and return output
-     * @param args Command arguments (excluding 'zfs')
-     * @param output Output string to fill
-     * @return Exit code
+     * Open a ZFS dataset handle
+     * @param name Full dataset name
+     * @param type Dataset type (ZFS_TYPE_FILESYSTEM, ZFS_TYPE_SNAPSHOT, etc.)
+     * @return Dataset handle or nullptr on failure
      */
-    int run_zfs(const std::vector<std::string>& args,
-                std::string& output) const;
-
-    /**
-     * Execute a ZFS command without capturing output
-     * @param args Command arguments (excluding 'zfs')
-     * @return Exit code
-     */
-    int run_zfs(const std::vector<std::string>& args) const;
+    zfs_handle_t* open_dataset(const std::string& name, int type) const;
 
     /**
      * Load assignments from JSON file
@@ -110,6 +113,17 @@ private:
      */
     bool set_state_permissions(const std::string& state_name) const;
 
+    /**
+     * Callback for iterating datasets
+     */
+    static int dataset_iter_callback(zfs_handle_t* zhp, void* data);
+
+    /**
+     * Callback for iterating snapshots
+     */
+    static int snapshot_iter_callback(zfs_handle_t* zhp, void* data);
+
+    libzfs_handle_t* zfs_handle_ = nullptr;
     std::string pool_;
     std::string base_dataset_;
     std::string states_dir_;

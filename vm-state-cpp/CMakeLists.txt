@@ -8,10 +8,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Find required packages
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SYSTEMD REQUIRED libsystemd)
+pkg_check_modules(LIBZFS REQUIRED libzfs)
+pkg_check_modules(LIBNVPAIR REQUIRED libnvpair)
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${SYSTEMD_INCLUDE_DIRS})
+include_directories(${LIBZFS_INCLUDE_DIRS})
+include_directories(${LIBNVPAIR_INCLUDE_DIRS})
 
 # Source files
 set(SOURCES
@@ -29,7 +33,11 @@ set(SOURCES
 add_executable(vm-state ${SOURCES})
 
 # Link libraries
-target_link_libraries(vm-state ${SYSTEMD_LIBRARIES})
+target_link_libraries(vm-state
+    ${SYSTEMD_LIBRARIES}
+    ${LIBZFS_LIBRARIES}
+    ${LIBNVPAIR_LIBRARIES}
+)
 
 # Install
 install(TARGETS vm-state DESTINATION bin)

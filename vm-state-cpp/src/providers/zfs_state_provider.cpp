@@ -1,8 +1,8 @@
 #include "providers/zfs_state_provider.hpp"
-#include "utils/exec.hpp"
 #include "utils/json.hpp"
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <grp.h>
@@ -10,10 +10,24 @@
 #include <sstream>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/nvpair.h>
 
 namespace fs = std::filesystem;
 
 namespace vmstate {
+
+// Helper struct for collecting datasets during iteration
+struct DatasetCollector {
+    std::vector<StateInfo>* states;
+    std::string base_path;
+    libzfs_handle_t* zfs_handle;
+};
+
+// Helper struct for collecting snapshots during iteration
+struct SnapshotCollector {
+    std::vector<SnapshotInfo>* snapshots;
+    std::string base_path;
+};
 
 ZFSStateProvider::ZFSStateProvider(
     const std::string& pool,
@@ -25,7 +39,25 @@ ZFSStateProvider::ZFSStateProvider(
       base_dataset_(base_dataset),
       states_dir_(states_dir),
       assignments_file_(assignments_file),
-      slots_(slots) {}
+      slots_(slots) {
+    init_libzfs();
+}
+
+ZFSStateProvider::~ZFSStateProvider() {
+    if (zfs_handle_) {
+        libzfs_fini(zfs_handle_);
+        zfs_handle_ = nullptr;
+    }
+}
+
+bool ZFSStateProvider::init_libzfs() {
+    zfs_handle_ = libzfs_init();
+    if (!zfs_handle_) {
+        last_error_ = "Failed to initialize libzfs";
+        return false;
+    }
+    return true;
+}
 
 std::string ZFSStateProvider::get_dataset_path(
     const std::string& state_name) const {
@@ -37,19 +69,11 @@ std::string ZFSStateProvider::get_mount_path(
     return states_dir_ + "/" + state_name;
 }
 
-int ZFSStateProvider::run_zfs(const std::vector<std::string>& args,
-                               std::string& output) const {
-    auto result = utils::exec("zfs", args);
-    output = result.stdout_output;
-    if (result.exit_code != 0 && !result.stderr_output.empty()) {
-        last_error_ = result.stderr_output;
+zfs_handle_t* ZFSStateProvider::open_dataset(const std::string& name, int type) const {
+    if (!zfs_handle_) {
+        return nullptr;
     }
-    return result.exit_code;
-}
-
-int ZFSStateProvider::run_zfs(const std::vector<std::string>& args) const {
-    std::string output;
-    return run_zfs(args, output);
+    return zfs_open(zfs_handle_, name.c_str(), type);
 }
 
 std::map<std::string, std::string> ZFSStateProvider::load_assignments() const {
@@ -145,6 +169,11 @@ bool ZFSStateProvider::create_state_symlink(
 }
 
 bool ZFSStateProvider::create_state(const std::string& name) {
+    if (!zfs_handle_) {
+        last_error_ = "libzfs not initialized";
+        return false;
+    }
+
     std::string dataset = get_dataset_path(name);
     std::string mountpoint = get_mount_path(name);
 
@@ -154,9 +183,28 @@ bool ZFSStateProvider::create_state(const std::string& name) {
         return false;
     }
 
-    // Create ZFS dataset
-    int r = run_zfs({"create", "-o", "mountpoint=" + mountpoint, dataset});
-    if (r != 0) {
+    // Create nvlist for properties
+    nvlist_t* props = nullptr;
+    if (nvlist_alloc(&props, NV_UNIQUE_NAME, 0) != 0) {
+        last_error_ = "Failed to allocate nvlist for properties";
+        return false;
+    }
+
+    // Set mountpoint property
+    if (nvlist_add_string(props, zfs_prop_to_name(ZFS_PROP_MOUNTPOINT),
+                          mountpoint.c_str()) != 0) {
+        nvlist_free(props);
+        last_error_ = "Failed to set mountpoint property";
+        return false;
+    }
+
+    // Create the dataset
+    int ret = zfs_create(zfs_handle_, dataset.c_str(), ZFS_TYPE_FILESYSTEM, props);
+    nvlist_free(props);
+
+    if (ret != 0) {
+        last_error_ = "Failed to create dataset: " +
+                      std::string(libzfs_error_description(zfs_handle_));
         return false;
     }
 
@@ -169,6 +217,11 @@ bool ZFSStateProvider::create_state(const std::string& name) {
 }
 
 bool ZFSStateProvider::delete_state(const std::string& name, bool force) {
+    if (!zfs_handle_) {
+        last_error_ = "libzfs not initialized";
+        return false;
+    }
+
     if (!state_exists(name)) {
         last_error_ = "State '" + name + "' doesn't exist";
         return false;
@@ -185,14 +238,34 @@ bool ZFSStateProvider::delete_state(const std::string& name, bool force) {
 
     std::string dataset = get_dataset_path(name);
 
-    // Delete the dataset and all its snapshots recursively
-    // Using -r flag to handle promoted clones that have origin snapshots
-    int r = run_zfs({"destroy", "-r", dataset});
-    return r == 0;
+    // Open the dataset
+    zfs_handle_t* zhp = open_dataset(dataset, ZFS_TYPE_FILESYSTEM);
+    if (!zhp) {
+        last_error_ = "Failed to open dataset: " +
+                      std::string(libzfs_error_description(zfs_handle_));
+        return false;
+    }
+
+    // Destroy recursively (handles snapshots)
+    int ret = zfs_destroy(zhp, B_TRUE);  // B_TRUE = defer (recursive)
+    zfs_close(zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to destroy dataset: " +
+                      std::string(libzfs_error_description(zfs_handle_));
+        return false;
+    }
+
+    return true;
 }
 
 bool ZFSStateProvider::clone_state(const std::string& source,
                                     const std::string& dest) {
+    if (!zfs_handle_) {
+        last_error_ = "libzfs not initialized";
+        return false;
+    }
+
     if (!state_exists(source)) {
         last_error_ = "Source state '" + source + "' doesn't exist";
         return false;
@@ -208,21 +281,67 @@ bool ZFSStateProvider::clone_state(const std::string& source,
     std::string dst_mount = get_mount_path(dest);
 
     // Create a snapshot for cloning
-    std::string clone_snap = src_dataset + "@clone-for-" + dest;
-    int r = run_zfs({"snapshot", clone_snap});
-    if (r != 0) {
+    std::string snap_name = "clone-for-" + dest;
+    std::string full_snap = src_dataset + "@" + snap_name;
+
+    // Open source dataset
+    zfs_handle_t* src_zhp = open_dataset(src_dataset, ZFS_TYPE_FILESYSTEM);
+    if (!src_zhp) {
+        last_error_ = "Failed to open source dataset";
         return false;
     }
+
+    // Create snapshot
+    nvlist_t* snap_props = nullptr;
+    nvlist_alloc(&snap_props, NV_UNIQUE_NAME, 0);
+
+    int ret = zfs_snapshot(zfs_handle_, full_snap.c_str(), B_FALSE, snap_props);
+    nvlist_free(snap_props);
+    zfs_close(src_zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to create snapshot: " +
+                      std::string(libzfs_error_description(zfs_handle_));
+        return false;
+    }
+
+    // Open the snapshot
+    zfs_handle_t* snap_zhp = open_dataset(full_snap, ZFS_TYPE_SNAPSHOT);
+    if (!snap_zhp) {
+        last_error_ = "Failed to open snapshot for cloning";
+        return false;
+    }
+
+    // Create clone properties
+    nvlist_t* clone_props = nullptr;
+    nvlist_alloc(&clone_props, NV_UNIQUE_NAME, 0);
+    nvlist_add_string(clone_props, zfs_prop_to_name(ZFS_PROP_MOUNTPOINT),
+                      dst_mount.c_str());
 
     // Clone from snapshot
-    r = run_zfs({"clone", "-o", "mountpoint=" + dst_mount, clone_snap, dst_dataset});
-    if (r != 0) {
+    ret = zfs_clone(snap_zhp, dst_dataset.c_str(), clone_props);
+    nvlist_free(clone_props);
+    zfs_close(snap_zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to clone dataset: " +
+                      std::string(libzfs_error_description(zfs_handle_));
         return false;
     }
 
-    // Promote to independent dataset
-    r = run_zfs({"promote", dst_dataset});
-    if (r != 0) {
+    // Promote the clone to an independent dataset
+    zfs_handle_t* clone_zhp = open_dataset(dst_dataset, ZFS_TYPE_FILESYSTEM);
+    if (!clone_zhp) {
+        last_error_ = "Failed to open cloned dataset for promotion";
+        return false;
+    }
+
+    ret = zfs_promote(clone_zhp);
+    zfs_close(clone_zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to promote clone: " +
+                      std::string(libzfs_error_description(zfs_handle_));
         return false;
     }
 
@@ -235,113 +354,163 @@ bool ZFSStateProvider::clone_state(const std::string& source,
 }
 
 bool ZFSStateProvider::state_exists(const std::string& name) {
-    std::string output;
-    int r = run_zfs({"list", "-H", get_dataset_path(name)}, output);
-    return r == 0;
+    if (!zfs_handle_) {
+        return false;
+    }
+
+    std::string dataset = get_dataset_path(name);
+    zfs_handle_t* zhp = zfs_open(zfs_handle_, dataset.c_str(), ZFS_TYPE_FILESYSTEM);
+    if (zhp) {
+        zfs_close(zhp);
+        return true;
+    }
+    return false;
 }
 
 std::optional<StateInfo> ZFSStateProvider::get_state_info(
     const std::string& name) {
-    std::string dataset = get_dataset_path(name);
-    std::string output;
-
-    int r = run_zfs({"list", "-H", "-o", "name,used,avail", dataset}, output);
-    if (r != 0) {
+    if (!zfs_handle_) {
         return std::nullopt;
     }
 
-    // Parse output: name<tab>used<tab>avail
-    std::istringstream ss(output);
-    std::string ds_name, used, avail;
-    ss >> ds_name >> used >> avail;
+    std::string dataset = get_dataset_path(name);
+    zfs_handle_t* zhp = open_dataset(dataset, ZFS_TYPE_FILESYSTEM);
+    if (!zhp) {
+        return std::nullopt;
+    }
 
     StateInfo info;
     info.name = name;
     info.path = get_mount_path(name);
     info.dataset = dataset;
 
-    // Parse sizes (handle K, M, G suffixes)
-    auto parse_size = [](const std::string& s) -> uint64_t {
-        if (s.empty()) return 0;
-        double value = std::stod(s);
-        char suffix = s.back();
-        switch (suffix) {
-            case 'K': return static_cast<uint64_t>(value * 1024);
-            case 'M': return static_cast<uint64_t>(value * 1024 * 1024);
-            case 'G': return static_cast<uint64_t>(value * 1024 * 1024 * 1024);
-            case 'T': return static_cast<uint64_t>(value * 1024 * 1024 * 1024 * 1024);
-            default: return static_cast<uint64_t>(value);
-        }
-    };
+    // Get used and available space
+    info.used_bytes = zfs_prop_get_int(zhp, ZFS_PROP_USED);
+    info.available_bytes = zfs_prop_get_int(zhp, ZFS_PROP_AVAILABLE);
 
-    try {
-        info.used_bytes = parse_size(used);
-        info.available_bytes = parse_size(avail);
-    } catch (...) {
-        info.used_bytes = 0;
-        info.available_bytes = 0;
+    zfs_close(zhp);
+    return info;
+}
+
+int ZFSStateProvider::dataset_iter_callback(zfs_handle_t* zhp, void* data) {
+    auto* collector = static_cast<DatasetCollector*>(data);
+
+    const char* name = zfs_get_name(zhp);
+    std::string name_str(name);
+
+    // Skip the base dataset itself
+    if (name_str != collector->base_path) {
+        // Extract state name from dataset path
+        std::string state_name = name_str.substr(collector->base_path.size() + 1);
+
+        // Skip nested datasets
+        if (state_name.find('/') == std::string::npos) {
+            StateInfo info;
+            info.name = state_name;
+            info.dataset = name_str;
+            info.used_bytes = zfs_prop_get_int(zhp, ZFS_PROP_USED);
+            info.available_bytes = zfs_prop_get_int(zhp, ZFS_PROP_AVAILABLE);
+
+            char mountpoint[ZFS_MAXPROPLEN];
+            if (zfs_prop_get(zhp, ZFS_PROP_MOUNTPOINT, mountpoint,
+                            sizeof(mountpoint), nullptr, nullptr, 0, B_FALSE) == 0) {
+                info.path = mountpoint;
+            }
+
+            collector->states->push_back(info);
+        }
     }
 
-    return info;
+    zfs_close(zhp);
+    return 0;
 }
 
 std::vector<StateInfo> ZFSStateProvider::list_states() {
     std::vector<StateInfo> result;
-    std::string base = pool_ + "/" + base_dataset_;
-    std::string output;
 
-    int r = run_zfs({"list", "-H", "-o", "name,used,avail", "-r", base}, output);
-    if (r != 0) {
+    if (!zfs_handle_) {
         return result;
     }
 
-    std::istringstream ss(output);
-    std::string line;
-    while (std::getline(ss, line)) {
-        if (line.empty()) continue;
-
-        std::istringstream line_ss(line);
-        std::string name, used, avail;
-        line_ss >> name >> used >> avail;
-
-        // Skip the base dataset itself
-        if (name == base) continue;
-
-        // Extract state name from full dataset path
-        std::string state_name = name.substr(base.size() + 1);
-        // Skip nested datasets (snapshots show as separate)
-        if (state_name.find('/') != std::string::npos) continue;
-
-        auto info = get_state_info(state_name);
-        if (info) {
-            result.push_back(*info);
-        }
+    std::string base = pool_ + "/" + base_dataset_;
+    zfs_handle_t* base_zhp = open_dataset(base, ZFS_TYPE_FILESYSTEM);
+    if (!base_zhp) {
+        return result;
     }
+
+    DatasetCollector collector;
+    collector.states = &result;
+    collector.base_path = base;
+    collector.zfs_handle = zfs_handle_;
+
+    zfs_iter_filesystems(base_zhp, dataset_iter_callback, &collector);
+    zfs_close(base_zhp);
 
     return result;
 }
 
 bool ZFSStateProvider::create_snapshot(const std::string& state_name,
                                          const std::string& snapshot_name) {
+    if (!zfs_handle_) {
+        last_error_ = "libzfs not initialized";
+        return false;
+    }
+
     if (!state_exists(state_name)) {
         last_error_ = "State '" + state_name + "' doesn't exist";
         return false;
     }
 
     std::string full_snap = get_dataset_path(state_name) + "@" + snapshot_name;
-    int r = run_zfs({"snapshot", full_snap});
-    return r == 0;
+
+    nvlist_t* props = nullptr;
+    nvlist_alloc(&props, NV_UNIQUE_NAME, 0);
+
+    int ret = zfs_snapshot(zfs_handle_, full_snap.c_str(), B_FALSE, props);
+    nvlist_free(props);
+
+    if (ret != 0) {
+        last_error_ = "Failed to create snapshot: " +
+                      std::string(libzfs_error_description(zfs_handle_));
+        return false;
+    }
+
+    return true;
 }
 
 bool ZFSStateProvider::delete_snapshot(const std::string& state_name,
                                          const std::string& snapshot_name) {
+    if (!zfs_handle_) {
+        last_error_ = "libzfs not initialized";
+        return false;
+    }
+
     std::string full_snap = get_dataset_path(state_name) + "@" + snapshot_name;
-    int r = run_zfs({"destroy", full_snap});
-    return r == 0;
+    zfs_handle_t* zhp = open_dataset(full_snap, ZFS_TYPE_SNAPSHOT);
+    if (!zhp) {
+        last_error_ = "Snapshot not found";
+        return false;
+    }
+
+    int ret = zfs_destroy(zhp, B_FALSE);
+    zfs_close(zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to destroy snapshot: " +
+                      std::string(libzfs_error_description(zfs_handle_));
+        return false;
+    }
+
+    return true;
 }
 
 bool ZFSStateProvider::restore_snapshot(const std::string& snapshot_name,
                                           const std::string& new_state_name) {
+    if (!zfs_handle_) {
+        last_error_ = "libzfs not initialized";
+        return false;
+    }
+
     // Find the snapshot
     auto snap = find_snapshot(snapshot_name);
     if (!snap) {
@@ -357,16 +526,43 @@ bool ZFSStateProvider::restore_snapshot(const std::string& snapshot_name,
     std::string dst_dataset = get_dataset_path(new_state_name);
     std::string dst_mount = get_mount_path(new_state_name);
 
+    // Open the snapshot
+    zfs_handle_t* snap_zhp = open_dataset(snap->full_name, ZFS_TYPE_SNAPSHOT);
+    if (!snap_zhp) {
+        last_error_ = "Failed to open snapshot";
+        return false;
+    }
+
+    // Create clone properties
+    nvlist_t* props = nullptr;
+    nvlist_alloc(&props, NV_UNIQUE_NAME, 0);
+    nvlist_add_string(props, zfs_prop_to_name(ZFS_PROP_MOUNTPOINT),
+                      dst_mount.c_str());
+
     // Clone from snapshot
-    int r = run_zfs({"clone", "-o", "mountpoint=" + dst_mount,
-                     snap->full_name, dst_dataset});
-    if (r != 0) {
+    int ret = zfs_clone(snap_zhp, dst_dataset.c_str(), props);
+    nvlist_free(props);
+    zfs_close(snap_zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to clone from snapshot: " +
+                      std::string(libzfs_error_description(zfs_handle_));
         return false;
     }
 
     // Promote to independent dataset
-    r = run_zfs({"promote", dst_dataset});
-    if (r != 0) {
+    zfs_handle_t* clone_zhp = open_dataset(dst_dataset, ZFS_TYPE_FILESYSTEM);
+    if (!clone_zhp) {
+        last_error_ = "Failed to open cloned dataset";
+        return false;
+    }
+
+    ret = zfs_promote(clone_zhp);
+    zfs_close(clone_zhp);
+
+    if (ret != 0) {
+        last_error_ = "Failed to promote clone: " +
+                      std::string(libzfs_error_description(zfs_handle_));
         return false;
     }
 
@@ -378,70 +574,83 @@ bool ZFSStateProvider::restore_snapshot(const std::string& snapshot_name,
     return true;
 }
 
-std::vector<SnapshotInfo> ZFSStateProvider::list_snapshots(
-    const std::string& state_name) {
-    std::vector<SnapshotInfo> result;
-    std::string base = pool_ + "/" + base_dataset_;
-    std::string target = state_name.empty() ? base : get_dataset_path(state_name);
+int ZFSStateProvider::snapshot_iter_callback(zfs_handle_t* zhp, void* data) {
+    auto* collector = static_cast<SnapshotCollector*>(data);
 
-    std::string output;
-    int r = run_zfs({"list", "-H", "-t", "snapshot", "-o", "name,creation,refer",
-                     "-r", target}, output);
-    if (r != 0) {
-        return result;
-    }
+    const char* full_name = zfs_get_name(zhp);
+    std::string full_name_str(full_name);
 
-    std::istringstream ss(output);
-    std::string line;
-    while (std::getline(ss, line)) {
-        if (line.empty()) continue;
+    // Find @ separator
+    size_t at_pos = full_name_str.find('@');
+    if (at_pos != std::string::npos) {
+        std::string dataset = full_name_str.substr(0, at_pos);
+        std::string snap_name = full_name_str.substr(at_pos + 1);
 
-        std::istringstream line_ss(line);
-        std::string full_name, creation, refer;
-        line_ss >> full_name;
-        // Creation time may have spaces, read rest and then size
-        std::string rest;
-        std::getline(line_ss, rest);
-        // Simple parse: last token is size, rest is creation time
-        size_t last_space = rest.rfind('\t');
-        if (last_space != std::string::npos) {
-            creation = rest.substr(0, last_space);
-            refer = rest.substr(last_space + 1);
+        // Extract state name
+        std::string state_name;
+        if (dataset.size() > collector->base_path.size() + 1) {
+            state_name = dataset.substr(collector->base_path.size() + 1);
         }
-
-        // Extract snapshot name and state name
-        size_t at_pos = full_name.find('@');
-        if (at_pos == std::string::npos) continue;
-
-        std::string dataset = full_name.substr(0, at_pos);
-        std::string snap_name = full_name.substr(at_pos + 1);
-
-        // Extract state name from dataset
-        std::string state = dataset.substr(base.size() + 1);
 
         SnapshotInfo info;
         info.name = snap_name;
-        info.state_name = state;
-        info.full_name = full_name;
-        info.creation_time = creation;
+        info.state_name = state_name;
+        info.full_name = full_name_str;
+        info.size_bytes = zfs_prop_get_int(zhp, ZFS_PROP_REFERENCED);
 
-        // Parse size
-        try {
-            double val = std::stod(refer);
-            char suffix = refer.back();
-            switch (suffix) {
-                case 'K': info.size_bytes = static_cast<uint64_t>(val * 1024); break;
-                case 'M': info.size_bytes = static_cast<uint64_t>(val * 1024 * 1024); break;
-                case 'G': info.size_bytes = static_cast<uint64_t>(val * 1024 * 1024 * 1024); break;
-                default: info.size_bytes = static_cast<uint64_t>(val); break;
-            }
-        } catch (...) {
-            info.size_bytes = 0;
+        // Get creation time
+        char creation[64];
+        if (zfs_prop_get(zhp, ZFS_PROP_CREATION, creation,
+                        sizeof(creation), nullptr, nullptr, 0, B_FALSE) == 0) {
+            info.creation_time = creation;
         }
 
-        result.push_back(info);
+        collector->snapshots->push_back(info);
     }
 
+    zfs_close(zhp);
+    return 0;
+}
+
+std::vector<SnapshotInfo> ZFSStateProvider::list_snapshots(
+    const std::string& state_name) {
+    std::vector<SnapshotInfo> result;
+
+    if (!zfs_handle_) {
+        return result;
+    }
+
+    std::string base = pool_ + "/" + base_dataset_;
+    std::string target = state_name.empty() ? base : get_dataset_path(state_name);
+
+    zfs_handle_t* zhp = open_dataset(target, ZFS_TYPE_FILESYSTEM);
+    if (!zhp) {
+        return result;
+    }
+
+    SnapshotCollector collector;
+    collector.snapshots = &result;
+    collector.base_path = base;
+
+    // If listing for a specific state, just iterate its snapshots
+    // Otherwise, iterate all filesystems and their snapshots
+    if (!state_name.empty()) {
+        zfs_iter_snapshots(zhp, B_FALSE, snapshot_iter_callback, &collector);
+    } else {
+        // Need to iterate all child filesystems and their snapshots
+        zfs_iter_snapshots(zhp, B_FALSE, snapshot_iter_callback, &collector);
+
+        // Also iterate child filesystems
+        auto iter_children = [](zfs_handle_t* child_zhp, void* data) -> int {
+            auto* coll = static_cast<SnapshotCollector*>(data);
+            zfs_iter_snapshots(child_zhp, B_FALSE, snapshot_iter_callback, data);
+            zfs_close(child_zhp);
+            return 0;
+        };
+        zfs_iter_filesystems(zhp, iter_children, &collector);
+    }
+
+    zfs_close(zhp);
     return result;
 }
 
