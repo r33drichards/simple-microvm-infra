@@ -125,7 +125,9 @@ bool ZFSStateProvider::create_state_symlink(
     struct passwd* pw = getpwnam("microvm");
     struct group* gr = getgrnam("kvm");
     if (pw && gr) {
-        chown(slot_dir.c_str(), pw->pw_uid, gr->gr_gid);
+        if (chown(slot_dir.c_str(), pw->pw_uid, gr->gr_gid) != 0) {
+            // Continue even if chown fails (not critical)
+        }
     }
 
     return true;
