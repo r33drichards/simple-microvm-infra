@@ -105,11 +105,22 @@ bool ZFSStateProvider::create_state_symlink(
     }
 
     // Remove existing symlink or backup regular file
-    if (fs::exists(slot_data)) {
-        if (fs::is_symlink(slot_data)) {
-            fs::remove(slot_data);
-        } else if (fs::is_regular_file(slot_data)) {
-            fs::rename(slot_data, slot_data + ".backup");
+    // Use symlink_status to detect symlinks without following them
+    std::error_code ec;
+    auto status = fs::symlink_status(slot_data, ec);
+    if (!ec && fs::exists(status)) {
+        if (fs::is_symlink(status)) {
+            fs::remove(slot_data, ec);
+            if (ec) {
+                last_error_ = "Failed to remove existing symlink: " + ec.message();
+                return false;
+            }
+        } else if (fs::is_regular_file(status)) {
+            fs::rename(slot_data, slot_data + ".backup", ec);
+            if (ec) {
+                last_error_ = "Failed to backup existing file: " + ec.message();
+                return false;
+            }
         }
     }
 
