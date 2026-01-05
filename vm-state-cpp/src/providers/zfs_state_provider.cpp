@@ -1,6 +1,7 @@
 #include "providers/zfs_state_provider.hpp"
 #include "utils/json.hpp"
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -97,16 +98,22 @@ bool ZFSStateProvider::set_state_permissions(
     struct passwd* pw = getpwnam("microvm");
     struct group* gr = getgrnam("kvm");
 
-    uid_t uid = pw ? pw->pw_uid : 0;
-    gid_t gid = gr ? gr->gr_gid : 0;
+    // If microvm/kvm don't exist, skip permission setting (non-fatal)
+    if (!pw || !gr) {
+        // Not an error - just skip permission setting in test environments
+        return true;
+    }
+
+    uid_t uid = pw->pw_uid;
+    gid_t gid = gr->gr_gid;
 
     if (chown(path.c_str(), uid, gid) != 0) {
-        last_error_ = "Failed to chown " + path;
+        last_error_ = "Failed to chown " + path + ": " + std::strerror(errno);
         return false;
     }
 
     if (chmod(path.c_str(), 0755) != 0) {
-        last_error_ = "Failed to chmod " + path;
+        last_error_ = "Failed to chmod " + path + ": " + std::strerror(errno);
         return false;
     }
 
