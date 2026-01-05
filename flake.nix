@@ -33,6 +33,7 @@
 
       # Custom packages
       playwright-mcp = pkgs.callPackage ./pkgs/playwright-mcp {};
+      vm-state = pkgs.callPackage ./vm-state-cpp {};
 
       # Slot definitions - each slot is a fixed network identity
       # Slots are minimal NixOS - users customize via nixos-rebuild inside VM
@@ -71,12 +72,15 @@
     in {
       # Custom packages
       packages.${system} = {
-        inherit playwright-mcp;
+        inherit playwright-mcp vm-state;
         setup-hypervisor-iam = setupHypervisorIam system;
       };
 
-      # Also provide for x86_64 (for running from local dev machines)
-      packages.x86_64-linux.setup-hypervisor-iam = setupHypervisorIam "x86_64-linux";
+      # Also provide for x86_64 (for running from local dev machines and CI)
+      packages.x86_64-linux = {
+        vm-state = nixpkgs.legacyPackages.x86_64-linux.callPackage ./vm-state-cpp {};
+        setup-hypervisor-iam = setupHypervisorIam "x86_64-linux";
+      };
       packages.x86_64-darwin.setup-hypervisor-iam = setupHypervisorIam "x86_64-darwin";
       packages.aarch64-darwin.setup-hypervisor-iam = setupHypervisorIam "aarch64-darwin";
 
@@ -114,5 +118,24 @@
 
       # Export our library function for building MicroVMs
       lib.microvmSystem = import ./lib { inherit self nixpkgs microvm comin playwright-mcp; };
+
+      # Integration tests (x86_64-linux for CI compatibility)
+      checks.x86_64-linux = let
+        testPkgs = nixpkgs.legacyPackages.x86_64-linux;
+        testVmState = testPkgs.callPackage ./vm-state-cpp {};
+      in {
+        vm-state = import ./tests/vm-state.nix {
+          pkgs = testPkgs;
+          vm-state = testVmState;
+        };
+      };
+
+      # Also support aarch64-linux checks
+      checks.aarch64-linux = {
+        vm-state = import ./tests/vm-state.nix {
+          pkgs = pkgs;
+          inherit vm-state;
+        };
+      };
     };
 }
