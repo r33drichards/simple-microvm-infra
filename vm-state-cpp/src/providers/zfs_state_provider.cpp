@@ -217,17 +217,28 @@ bool ZFSStateProvider::create_state(const std::string& name) {
         return false;
     }
 
-    // Wait for the mountpoint to appear (ZFS auto-mount may have a delay)
-    int max_wait_ms = 2000;
-    int wait_interval_ms = 50;
-    int waited_ms = 0;
-    while (!fs::exists(mountpoint) && waited_ms < max_wait_ms) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_interval_ms));
-        waited_ms += wait_interval_ms;
+    // Explicitly mount the dataset (auto-mount may not work in all environments)
+    zfs_handle_t* zhp = open_dataset(dataset, ZFS_TYPE_FILESYSTEM);
+    if (!zhp) {
+        last_error_ = "Failed to open newly created dataset";
+        return false;
     }
 
+    // Check if already mounted
+    if (!zfs_is_mounted(zhp, nullptr)) {
+        ret = zfs_mount(zhp, nullptr, 0);
+        if (ret != 0) {
+            last_error_ = "Failed to mount dataset: " +
+                          std::string(libzfs_error_description(zfs_handle_));
+            zfs_close(zhp);
+            return false;
+        }
+    }
+    zfs_close(zhp);
+
+    // Verify mountpoint exists
     if (!fs::exists(mountpoint)) {
-        last_error_ = "Mountpoint did not appear after creating dataset: " + mountpoint;
+        last_error_ = "Mountpoint does not exist after mounting: " + mountpoint;
         return false;
     }
 
