@@ -185,14 +185,9 @@ bool ZFSStateProvider::delete_state(const std::string& name, bool force) {
 
     std::string dataset = get_dataset_path(name);
 
-    // Delete all snapshots first
-    auto snapshots = list_snapshots(name);
-    for (const auto& snap : snapshots) {
-        run_zfs({"destroy", snap.full_name});
-    }
-
-    // Delete the dataset
-    int r = run_zfs({"destroy", dataset});
+    // Delete the dataset and all its snapshots recursively
+    // Using -r flag to handle promoted clones that have origin snapshots
+    int r = run_zfs({"destroy", "-r", dataset});
     return r == 0;
 }
 
