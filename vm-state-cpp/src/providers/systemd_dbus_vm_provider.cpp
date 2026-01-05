@@ -120,7 +120,7 @@ std::optional<std::string> SystemdDBusVMProvider::get_unit_property(
         );
 
         if (r < 0) {
-            last_error_ = "Failed to load unit: " +
+            last_error_ = std::string("Failed to load unit: ") +
                           (error.message ? error.message : strerror(-r));
             sd_bus_error_free(&error);
             sd_bus_message_unref(m);
@@ -156,7 +156,7 @@ std::optional<std::string> SystemdDBusVMProvider::get_unit_property(
     );
 
     if (r < 0) {
-        last_error_ = "Failed to get property: " +
+        last_error_ = std::string("Failed to get property: ") +
                       (error.message ? error.message : strerror(-r));
         sd_bus_error_free(&error);
         sd_bus_message_unref(m);

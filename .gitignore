@@ -1,1 +1,2 @@
 *.pem
+vm-state-cpp/build/
