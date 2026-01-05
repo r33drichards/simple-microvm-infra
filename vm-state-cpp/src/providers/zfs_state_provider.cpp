@@ -2,10 +2,12 @@
 #include "utils/json.hpp"
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <grp.h>
 #include <pwd.h>
 #include <sstream>
@@ -212,6 +214,20 @@ bool ZFSStateProvider::create_state(const std::string& name) {
     if (ret != 0) {
         last_error_ = "Failed to create dataset: " +
                       std::string(libzfs_error_description(zfs_handle_));
+        return false;
+    }
+
+    // Wait for the mountpoint to appear (ZFS auto-mount may have a delay)
+    int max_wait_ms = 2000;
+    int wait_interval_ms = 50;
+    int waited_ms = 0;
+    while (!fs::exists(mountpoint) && waited_ms < max_wait_ms) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(wait_interval_ms));
+        waited_ms += wait_interval_ms;
+    }
+
+    if (!fs::exists(mountpoint)) {
+        last_error_ = "Mountpoint did not appear after creating dataset: " + mountpoint;
         return false;
     }
 
