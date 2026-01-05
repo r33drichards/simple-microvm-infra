@@ -371,11 +371,28 @@ bool ZFSStateProvider::clone_state(const std::string& source,
     }
 
     ret = zfs_promote(clone_zhp);
-    zfs_close(clone_zhp);
-
     if (ret != 0) {
         last_error_ = "Failed to promote clone: " +
                       std::string(libzfs_error_description(zfs_handle_));
+        zfs_close(clone_zhp);
+        return false;
+    }
+
+    // Explicitly mount the dataset (auto-mount may not work in all environments)
+    if (!zfs_is_mounted(clone_zhp, nullptr)) {
+        ret = zfs_mount(clone_zhp, nullptr, 0);
+        if (ret != 0) {
+            last_error_ = "Failed to mount cloned dataset: " +
+                          std::string(libzfs_error_description(zfs_handle_));
+            zfs_close(clone_zhp);
+            return false;
+        }
+    }
+    zfs_close(clone_zhp);
+
+    // Verify mountpoint exists
+    if (!fs::exists(dst_mount)) {
+        last_error_ = "Mountpoint does not exist after mounting: " + dst_mount;
         return false;
     }
 
@@ -592,11 +609,28 @@ bool ZFSStateProvider::restore_snapshot(const std::string& snapshot_name,
     }
 
     ret = zfs_promote(clone_zhp);
-    zfs_close(clone_zhp);
-
     if (ret != 0) {
         last_error_ = "Failed to promote clone: " +
                       std::string(libzfs_error_description(zfs_handle_));
+        zfs_close(clone_zhp);
+        return false;
+    }
+
+    // Explicitly mount the dataset (auto-mount may not work in all environments)
+    if (!zfs_is_mounted(clone_zhp, nullptr)) {
+        ret = zfs_mount(clone_zhp, nullptr, 0);
+        if (ret != 0) {
+            last_error_ = "Failed to mount restored dataset: " +
+                          std::string(libzfs_error_description(zfs_handle_));
+            zfs_close(clone_zhp);
+            return false;
+        }
+    }
+    zfs_close(clone_zhp);
+
+    // Verify mountpoint exists
+    if (!fs::exists(dst_mount)) {
+        last_error_ = "Mountpoint does not exist after mounting: " + dst_mount;
         return false;
     }
 
