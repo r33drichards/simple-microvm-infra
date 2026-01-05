@@ -4,6 +4,7 @@
 , pkg-config
 , systemd
 , zfs
+, util-linux
 }:
 
 stdenv.mkDerivation rec {
@@ -20,6 +21,7 @@ stdenv.mkDerivation rec {
   buildInputs = [
     systemd
     zfs  # Provides libzfs and libnvpair
+    util-linux  # Provides blkid, required by libzfs pkg-config
   ];
 
   cmakeFlags = [
