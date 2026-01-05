@@ -280,14 +280,43 @@ bool ZFSStateProvider::delete_state(const std::string& name, bool force) {
         return false;
     }
 
-    // Destroy recursively (handles snapshots)
-    int ret = zfs_destroy(zhp, B_TRUE);  // B_TRUE = defer (recursive)
+    // Get the origin property (if this is a clone)
+    char origin[ZFS_MAX_DATASET_NAME_LEN];
+    std::string origin_snap;
+    if (zfs_prop_get(zhp, ZFS_PROP_ORIGIN, origin, sizeof(origin),
+                     nullptr, nullptr, 0, B_FALSE) == 0 && origin[0] != '\0') {
+        origin_snap = origin;
+    }
+
+    // Unmount if mounted (required before destroy)
+    if (zfs_is_mounted(zhp, nullptr)) {
+        int unmount_ret = zfs_unmount(zhp, nullptr, 0);
+        if (unmount_ret != 0) {
+            // Try force unmount
+            zfs_unmount(zhp, nullptr, MS_FORCE);
+        }
+    }
+
+    // Destroy the dataset
+    int ret = zfs_destroy(zhp, B_FALSE);
     zfs_close(zhp);
 
     if (ret != 0) {
-        last_error_ = "Failed to destroy dataset: " +
-                      std::string(libzfs_error_description(zfs_handle_));
+        int err = libzfs_errno(zfs_handle_);
+        const char* desc = libzfs_error_description(zfs_handle_);
+        last_error_ = "Failed to destroy dataset (err=" + std::to_string(err) + "): " +
+                      (desc ? desc : "unknown error");
         return false;
+    }
+
+    // If this was a clone, try to clean up the origin snapshot
+    if (!origin_snap.empty()) {
+        zfs_handle_t* snap_zhp = open_dataset(origin_snap, ZFS_TYPE_SNAPSHOT);
+        if (snap_zhp) {
+            // Try to destroy the snapshot - will fail silently if other clones depend on it
+            zfs_destroy(snap_zhp, B_FALSE);
+            zfs_close(snap_zhp);
+        }
     }
 
     return true;
@@ -363,18 +392,15 @@ bool ZFSStateProvider::clone_state(const std::string& source,
         return false;
     }
 
-    // Promote the clone to an independent dataset
+    // Note: We intentionally do NOT promote the clone here.
+    // Promoting would make the source depend on the clone's snapshot,
+    // which would prevent deleting the clone independently.
+    // By keeping it as a clone, we can delete it without affecting the source.
+
+    // Open and mount the cloned dataset
     zfs_handle_t* clone_zhp = open_dataset(dst_dataset, ZFS_TYPE_FILESYSTEM);
     if (!clone_zhp) {
-        last_error_ = "Failed to open cloned dataset for promotion";
-        return false;
-    }
-
-    ret = zfs_promote(clone_zhp);
-    if (ret != 0) {
-        last_error_ = "Failed to promote clone: " +
-                      std::string(libzfs_error_description(zfs_handle_));
-        zfs_close(clone_zhp);
+        last_error_ = "Failed to open cloned dataset";
         return false;
     }
 
@@ -601,18 +627,15 @@ bool ZFSStateProvider::restore_snapshot(const std::string& snapshot_name,
         return false;
     }
 
-    // Promote to independent dataset
+    // Note: We intentionally do NOT promote the clone here.
+    // Promoting would make the original state depend on the restored state's snapshot,
+    // which would prevent deleting the restored state independently.
+    // By keeping it as a clone, we can delete it without affecting the original.
+
+    // Open and mount the cloned dataset
     zfs_handle_t* clone_zhp = open_dataset(dst_dataset, ZFS_TYPE_FILESYSTEM);
     if (!clone_zhp) {
         last_error_ = "Failed to open cloned dataset";
-        return false;
-    }
-
-    ret = zfs_promote(clone_zhp);
-    if (ret != 0) {
-        last_error_ = "Failed to promote clone: " +
-                      std::string(libzfs_error_description(zfs_handle_));
-        zfs_close(clone_zhp);
         return false;
     }
 
