@@ -24,16 +24,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # oclaw NixOS environment (XFCE desktop + Chromium + Comin)
-    oclaw-nix = {
-      url = "github:r33drichards/oclaw-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.comin.follows = "comin";
-    };
-
   };
 
-  outputs = { self, nixpkgs, microvm, comin, oclaw-nix }:
+  outputs = { self, nixpkgs, microvm, comin }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -46,10 +39,7 @@
       # Slots are minimal NixOS - users customize via nixos-rebuild inside VM
       # States are just block storage that can be snapshotted and swapped
       slots = {
-        slot1 = {
-          config = { microvm.mem = 8192; microvm.vcpu = 4; };
-          extraModules = [ oclaw-nix.nixosModules.default ];
-        };
+        slot1 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot2 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot3 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot4 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
