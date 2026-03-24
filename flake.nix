@@ -24,9 +24,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # oclaw NixOS environment (XFCE desktop + Chromium + Comin)
+    oclaw-nix = {
+      url = "github:r33drichards/oclaw-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.comin.follows = "comin";
+    };
+
   };
 
-  outputs = { self, nixpkgs, microvm, comin }:
+  outputs = { self, nixpkgs, microvm, comin, oclaw-nix }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -41,7 +48,7 @@
       slots = {
         slot1 = {
           config = { microvm.mem = 8192; microvm.vcpu = 4; };
-          extraModules = [ comin.nixosModules.comin ./hosts/slot1 ];
+          extraModules = [ oclaw-nix.nixosModules.default ];
         };
         slot2 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot3 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };

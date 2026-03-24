@@ -76,11 +76,35 @@
         "type": "github"
       }
     },
+    "oclaw-nix": {
+      "inputs": {
+        "comin": [
+          "comin"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1774335803,
+        "narHash": "sha256-PGZiB/GrNIHfUIEzdQ5eOUAzSv3mxg68EcD/G4KDed0=",
+        "owner": "r33drichards",
+        "repo": "oclaw-nix",
+        "rev": "8d29e15850baac66918c6cf6d04bf267c66ce556",
+        "type": "github"
+      },
+      "original": {
+        "owner": "r33drichards",
+        "repo": "oclaw-nix",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "comin": "comin",
         "microvm": "microvm",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "oclaw-nix": "oclaw-nix"
       }
     },
     "spectrum": {
