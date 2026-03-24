@@ -1,19 +1,25 @@
 model_list:
-  - model_name: claude-opus
+  - model_name: anthropic/claude-opus-4-6
     litellm_params:
       model: openrouter/anthropic/claude-opus-4-6
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
 
-  - model_name: claude-sonnet
+  - model_name: anthropic/claude-sonnet-4-6
     litellm_params:
       model: openrouter/anthropic/claude-sonnet-4-6
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
 
-  - model_name: claude-haiku
+  - model_name: anthropic/claude-haiku-4-5
     litellm_params:
       model: openrouter/anthropic/claude-haiku-4-5
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  - model_name: openrouter/free
+    litellm_params:
+      model: openrouter/openrouter/auto
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
 
