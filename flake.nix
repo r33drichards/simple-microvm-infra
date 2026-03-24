@@ -74,6 +74,7 @@
       packages.${system} = {
         inherit playwright-mcp vm-state;
         setup-hypervisor-iam = setupHypervisorIam system;
+        oauth-proxy = pkgs.callPackage ./hosts/hypervisor/oauth-proxy {};
       };
 
       # Also provide for x86_64 (for running from local dev machines and CI)
