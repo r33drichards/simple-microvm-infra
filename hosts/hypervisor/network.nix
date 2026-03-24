@@ -52,7 +52,7 @@ in
   services.dnsmasq = {
     enable = true;
     settings = {
-      bind-interfaces = true;
+      bind-dynamic = true;
       listen-address = lib.mapAttrsToList (_: net: "${net.subnet}.1") networks.networks;
       no-resolv = true;
       server = [ "1.1.1.1" "8.8.8.8" ];
