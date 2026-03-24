@@ -33,6 +33,9 @@
 
     # EBS volume management with ZFS
     ../../modules/ebs-volume
+
+    # Per-slot OAuth proxy systemd services
+    ./oauth-proxy-slots.nix
   ];
 
   # Nix settings
