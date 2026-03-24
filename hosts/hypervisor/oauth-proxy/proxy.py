@@ -162,7 +162,7 @@ class Handler(BaseHTTPRequestHandler):
             code  = qs.get("code",  [None])[0]
             state = qs.get("state", [None])[0]
 
-            if state != _pending_state:
+            if not secrets.compare_digest(state or "", _pending_state or ""):
                 return self._text(400, "Invalid state — please try again.")
 
             # Exchange code → token
@@ -185,25 +185,23 @@ class Handler(BaseHTTPRequestHandler):
             if "access_token" not in token_data:
                 return self._text(500, f"No access_token in response: {resp.decode()}")
 
-            _store(token_data)
-
             # Fetch userinfo
             s, b, _ = _fetch(USERINFO_URL, headers={
-                "Authorization": f"Bearer {_token['access_token']}",
+                "Authorization": f"Bearer {token_data['access_token']}",
                 "User-Agent":    "oauth-proxy/1.0",
                 "Accept":        "application/json",
             })
             if s != 200:
-                _token["access_token"] = None
                 return self._text(500, f"Could not fetch userinfo ({s}): {b.decode()}")
 
             userinfo = json.loads(b)
 
             # Evaluate Polar policy
             if not _is_allowed(userinfo):
-                _token["access_token"] = None
                 return self._text(403, f"Access denied for {userinfo.get('login', 'unknown')}")
 
+            _store(token_data)
+            _pending_state = None
             self._html(200, "<h2>Authenticated</h2><p>You may close this tab.</p>")
 
         # ── /status ────────────────────────────────────────────────────────
@@ -252,8 +250,10 @@ class Handler(BaseHTTPRequestHandler):
     # ── helpers ─────────────────────────────────────────────────────────────
 
     def _read_body(self):
-        n = int(self.headers.get("Content-Length", 0))
-        return self.rfile.read(n) if n else None
+        n = self.headers.get("Content-Length")
+        if n is None:
+            return None
+        return self.rfile.read(int(n))
 
     def _redirect(self, url):
         self.send_response(302)
