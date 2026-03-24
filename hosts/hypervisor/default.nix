@@ -28,8 +28,8 @@
     # Incus for VMs with full KVM support
     ./incus.nix
 
-    # DNS allowlist filtering for MicroVMs
-    ./dns-allowlist.nix
+    # NGINX SNI-based domain filtering for MicroVMs
+    ./nginx-sni-filter.nix
 
     # EBS volume management with ZFS
     ../../modules/ebs-volume

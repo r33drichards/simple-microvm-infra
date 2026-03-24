@@ -49,7 +49,7 @@ in
   ) networks.networks;
 
   # Enable IP forwarding (required for NAT and VM routing)
-  # Enable route_localnet to allow DNAT to 127.0.0.1 (for CoreDNS)
+  # Enable route_localnet to allow DNAT to 127.0.0.1 (for nginx SNI filter)
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;
     "net.ipv4.conf.all.route_localnet" = 1;
@@ -76,12 +76,6 @@ in
           # Note: VMs only have a route to IMDS when microvm.allowIMDS = true (default: false)
           # This rule only applies if a VM has the route configured
           ip saddr 10.0.0.0/8 ip daddr 169.254.169.254 tcp dport 80 dnat to 169.254.169.254:80
-
-          # Redirect ALL DNS queries from VMs to local CoreDNS (DNS allowlist filtering)
-          # This forces VMs to use the hypervisor's filtered DNS resolver
-          # Use DNAT to 127.0.0.1 so CoreDNS can bind to localhost only
-          iifname { ${bridgeList} } udp dport 53 dnat to 127.0.0.1:53
-          iifname { ${bridgeList} } tcp dport 53 dnat to 127.0.0.1:53
         }
 
         # Postrouting: Masquerade for internet and IMDS
