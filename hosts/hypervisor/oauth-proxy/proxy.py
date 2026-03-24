@@ -50,7 +50,7 @@ def _is_allowed(userinfo: dict) -> bool:
     if login in policy.get("allowed_logins", []):
         return True
     for domain in policy.get("allowed_email_domains", []):
-        if email.endswith("@" + domain):
+        if email.split("@")[-1] == domain:
             return True
     return False
 
@@ -243,7 +243,10 @@ class Handler(BaseHTTPRequestHandler):
         n = self.headers.get("Content-Length")
         if n is None:
             return None
-        return self.rfile.read(int(n))
+        n = int(n)
+        if n > 10 * 1024 * 1024:
+            return None
+        return self.rfile.read(n)
 
     def _redirect(self, url):
         self.send_response(302)

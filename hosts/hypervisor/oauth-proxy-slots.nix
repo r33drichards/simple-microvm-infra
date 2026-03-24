@@ -23,7 +23,6 @@ let
         EnvironmentFile = "/etc/oauth-proxy/${slotName}.env";
         Environment     = [
           "PORT=${toString port}"
-          "SIGN_IN_BASE_URL=http://${config.networking.hostName}:${toString port}"
           "AUTHZ_POLICY_FILE=${oauthProxy}/share/oauth-proxy/policy.json"
         ];
         Restart         = "on-failure";
@@ -45,5 +44,6 @@ in
     OAUTH2_UPSTREAM=https://api.github.com
     OAUTH2_SCOPE=read:user user:email
     OAUTH2_USERINFO_URL=https://api.github.com/user
+    SIGN_IN_BASE_URL=http://YOUR_HYPERVISOR_IP:PORT
   '';
 }
