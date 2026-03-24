@@ -53,11 +53,16 @@ in
     enable = true;
     settings = {
       bind-interfaces = true;
-      interface = lib.mapAttrsToList (_: net: net.bridge) networks.networks;
+      listen-address = lib.mapAttrsToList (_: net: "${net.subnet}.1") networks.networks;
       no-resolv = true;
       server = [ "1.1.1.1" "8.8.8.8" ];
       cache-size = 1000;
     };
+  };
+
+  systemd.services.dnsmasq = {
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
   };
 
   # Enable IP forwarding (required for NAT and VM routing)
