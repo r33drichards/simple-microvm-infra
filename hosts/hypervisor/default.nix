@@ -36,6 +36,9 @@
 
     # Per-slot OAuth proxy systemd services
     ./oauth-proxy-slots.nix
+
+    # LiteLLM proxy (OpenRouter → OpenAI-compatible API on port 4000)
+    ./litellm.nix
   ];
 
   # Nix settings
