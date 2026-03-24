@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OAuth2 reverse proxy with Polar authorization.
+OAuth2 reverse proxy with JSON policy authorization.
 
 Required env vars:
   OAUTH2_CLIENT_ID, OAUTH2_CLIENT_SECRET
@@ -8,11 +8,11 @@ Required env vars:
   OAUTH2_TOKEN_URL      e.g. https://github.com/login/oauth/access_token
   OAUTH2_REDIRECT_URI   e.g. http://54.185.189.181:4181/auth/callback
   OAUTH2_UPSTREAM       e.g. https://api.github.com
-  SIGN_IN_BASE_URL      e.g. http://54.185.189.181:4181  (public base for 401 URL)
-  AUTHZ_POLICY_FILE     e.g. /etc/oauth-proxy/authz.polar
+  SIGN_IN_BASE_URL      e.g. http://54.185.189.181:4181
+  AUTHZ_POLICY_FILE     e.g. /etc/oauth-proxy/policy.json
 
 Optional:
-  OAUTH2_SCOPE          default: "read:user user:email read:org"
+  OAUTH2_SCOPE          default: "read:user user:email"
   OAUTH2_USERINFO_URL   default: https://api.github.com/user
   PORT                  default: 4180
 """
@@ -25,8 +25,6 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from oso import Oso
-
 CLIENT_ID      = os.environ["OAUTH2_CLIENT_ID"]
 CLIENT_SECRET  = os.environ["OAUTH2_CLIENT_SECRET"]
 AUTH_URL       = os.environ["OAUTH2_AUTH_URL"]
@@ -35,27 +33,26 @@ REDIRECT_URI   = os.environ["OAUTH2_REDIRECT_URI"]
 UPSTREAM       = os.environ["OAUTH2_UPSTREAM"].rstrip("/")
 SIGN_IN_BASE   = os.environ["SIGN_IN_BASE_URL"].rstrip("/")
 POLICY_FILE    = os.environ["AUTHZ_POLICY_FILE"]
-SCOPE          = os.environ.get("OAUTH2_SCOPE", "read:user user:email read:org")
+SCOPE          = os.environ.get("OAUTH2_SCOPE", "read:user user:email")
 USERINFO_URL   = os.environ.get("OAUTH2_USERINFO_URL", "https://api.github.com/user")
 PORT           = int(os.environ.get("PORT", 4180))
 
+
 # ---------------------------------------------------------------------------
-# Polar / Oso setup
+# Policy
 # ---------------------------------------------------------------------------
-
-class GitHubUser:
-    def __init__(self, info: dict):
-        self.login = info.get("login", "")
-        self.email = info.get("email") or ""
-        self.name  = info.get("name")  or ""
-
-_oso = Oso()
-_oso.register_class(GitHubUser)
-_oso.load_files([POLICY_FILE])
-
 
 def _is_allowed(userinfo: dict) -> bool:
-    return _oso.is_allowed(GitHubUser(userinfo), "authenticate", None)
+    with open(POLICY_FILE) as f:
+        policy = json.load(f)
+    login = userinfo.get("login", "")
+    email = userinfo.get("email") or ""
+    if login in policy.get("allowed_logins", []):
+        return True
+    for domain in policy.get("allowed_email_domains", []):
+        if email.endswith("@" + domain):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +141,6 @@ class Handler(BaseHTTPRequestHandler):
         global _pending_state
         parsed = urllib.parse.urlparse(self.path)
 
-        # ── /auth ──────────────────────────────────────────────────────────
         if parsed.path == "/auth":
             _pending_state = secrets.token_urlsafe(16)
             qs = urllib.parse.urlencode({
@@ -156,16 +152,16 @@ class Handler(BaseHTTPRequestHandler):
             })
             self._redirect(f"{AUTH_URL}?{qs}")
 
-        # ── /auth/callback ─────────────────────────────────────────────────
         elif parsed.path == "/auth/callback":
-            qs   = urllib.parse.parse_qs(parsed.query)
+            qs    = urllib.parse.parse_qs(parsed.query)
             code  = qs.get("code",  [None])[0]
             state = qs.get("state", [None])[0]
 
-            if not secrets.compare_digest(state or "", _pending_state or ""):
+            if _pending_state is None:
+                return self._text(400, "No pending auth flow.")
+            if not secrets.compare_digest(state or "", _pending_state):
                 return self._text(400, "Invalid state — please try again.")
 
-            # Exchange code → token
             body = urllib.parse.urlencode({
                 "grant_type":    "authorization_code",
                 "code":          code,
@@ -179,32 +175,29 @@ class Handler(BaseHTTPRequestHandler):
                          "Content-Type": "application/x-www-form-urlencoded"},
             )
             if status != 200:
-                return self._text(500, f"Token exchange failed ({status}): {resp.decode()}")
+                return self._text(500, "Token exchange failed.")
 
             token_data = json.loads(resp)
             if "access_token" not in token_data:
-                return self._text(500, f"No access_token in response: {resp.decode()}")
+                return self._text(500, "No access_token in response.")
 
-            # Fetch userinfo
             s, b, _ = _fetch(USERINFO_URL, headers={
                 "Authorization": f"Bearer {token_data['access_token']}",
                 "User-Agent":    "oauth-proxy/1.0",
                 "Accept":        "application/json",
             })
             if s != 200:
-                return self._text(500, f"Could not fetch userinfo ({s}): {b.decode()}")
+                return self._text(500, "Could not fetch userinfo.")
 
             userinfo = json.loads(b)
 
-            # Evaluate Polar policy
             if not _is_allowed(userinfo):
-                return self._text(403, f"Access denied for {userinfo.get('login', 'unknown')}")
+                return self._text(403, f"Access denied for {userinfo.get('login', 'unknown')}.")
 
             _store(token_data)
             _pending_state = None
             self._html(200, "<h2>Authenticated</h2><p>You may close this tab.</p>")
 
-        # ── /status ────────────────────────────────────────────────────────
         elif parsed.path == "/status":
             self._json(200, {
                 "authenticated": _token["access_token"] is not None,
@@ -213,7 +206,6 @@ class Handler(BaseHTTPRequestHandler):
                 "expires_at":    _token["expires_at"],
             })
 
-        # ── proxy ──────────────────────────────────────────────────────────
         else:
             self._proxy(method)
 
@@ -221,8 +213,8 @@ class Handler(BaseHTTPRequestHandler):
         tok = _valid_token()
         if not tok:
             return self._json(401, {
-                "error":        "authentication_required",
-                "sign_in_url":  f"{SIGN_IN_BASE}/auth",
+                "error":       "authentication_required",
+                "sign_in_url": f"{SIGN_IN_BASE}/auth",
             })
 
         req_body = self._read_body()
@@ -246,8 +238,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header(h, v)
         self.end_headers()
         self.wfile.write(body)
-
-    # ── helpers ─────────────────────────────────────────────────────────────
 
     def _read_body(self):
         n = self.headers.get("Content-Length")
