@@ -159,6 +159,13 @@ let
     # === Slack ===
     "slack.com"
     ".slack.com"
+
+    # === WhatsApp Web ===
+    "web.whatsapp.com"
+    "whatsapp.com"
+    ".whatsapp.com"
+    ".whatsapp.net"
+    ".wa.me"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
