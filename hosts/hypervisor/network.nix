@@ -48,6 +48,18 @@ in
     }
   ) networks.networks;
 
+  # DNS for VMs: dnsmasq listens on bridge IPs (10.X.0.1) and forwards to 1.1.1.1
+  services.dnsmasq = {
+    enable = true;
+    settings = {
+      bind-interfaces = true;
+      interface = lib.mapAttrsToList (_: net: net.bridge) networks.networks;
+      no-resolv = true;
+      server = [ "1.1.1.1" "8.8.8.8" ];
+      cache-size = 1000;
+    };
+  };
+
   # Enable IP forwarding (required for NAT and VM routing)
   # Enable route_localnet to allow DNAT to 127.0.0.1 (for nginx SNI filter)
   boot.kernel.sysctl = {
