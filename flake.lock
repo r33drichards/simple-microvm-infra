@@ -103,11 +103,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1774372120,
-        "narHash": "sha256-h9X9CVQAO6hw/h6N2pIfAXK6qFuLU/MQQ4TUxJIqw6g=",
+        "lastModified": 1774373595,
+        "narHash": "sha256-k9qcOQYR96KmLJALlv+0caoA3OybIC4oSWXg9YfJSqg=",
         "owner": "r33drichards",
         "repo": "oclaw-nix",
-        "rev": "76c9102a21d2e9a645a6ca41181e9230b77559aa",
+        "rev": "f75287b7dec6b92c23354070d3ab7899419ec25a",
         "type": "github"
       },
       "original": {
