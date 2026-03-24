@@ -12,7 +12,7 @@
       url = "https://github.com/r33drichards/simple-microvm-infra.git";
 
       branches.main.name = "main";
-      branches.main.fetchInterval = 15;
+      poller.period = 15;
     }];
   };
 
