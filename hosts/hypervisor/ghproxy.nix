@@ -1,11 +1,11 @@
 # hosts/hypervisor/ghproxy.nix
 # HTTPS reverse proxy for the GitHub OAuth proxy on o.robw.fyi.
 # Routes /oauth2/callback → /auth/callback on localhost:4181 (oauth-proxy-slot1).
-{ ... }:
+{ lib, ... }:
 {
   security.acme = {
-    acceptTerms = true;
-    defaults.email = "rwendt1337@gmail.com";
+    acceptTerms = lib.mkDefault true;
+    defaults.email = lib.mkDefault "rwendt1337@gmail.com";
   };
 
   services.nginx.virtualHosts."o.robw.fyi" = {
