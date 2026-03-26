@@ -8,7 +8,7 @@ This document helps Claude Code understand and operate this MicroVM infrastructu
 
 | Machine | IP Address | SSH Command | Role |
 |---------|------------|-------------|------|
-| **Hypervisor** | 54.185.189.181 | `ssh -i ~/.ssh/rw-ssh-key root@54.185.189.181` | Host machine (AWS a1.metal) |
+| **Hypervisor** | 44.250.235.222 | `ssh -i ~/.ssh/id_ed25519 root@44.250.235.222` | Host machine (AWS a1.metal) |
 | **Slot1** | 10.1.0.2 | Via hypervisor (see below) | VM slot (portable state) |
 | **Slot2** | 10.2.0.2 | Via hypervisor (see below) | VM slot (portable state) |
 | **Slot3** | 10.3.0.2 | Via hypervisor (see below) | VM slot (portable state) |
@@ -36,13 +36,13 @@ This document helps Claude Code understand and operate this MicroVM infrastructu
 
 ```bash
 # Connect to hypervisor
-ssh -i ~/.ssh/rw-ssh-key root@54.185.189.181
+ssh -i ~/.ssh/id_ed25519 root@44.250.235.222
 
 # Connect to a slot (two-step via hypervisor)
-ssh -i ~/.ssh/rw-ssh-key root@54.185.189.181 'ssh -i /root/.ssh/id_ed25519 root@10.1.0.2 "COMMAND"'
+ssh -i ~/.ssh/id_ed25519 root@44.250.235.222 'ssh -i /root/.ssh/id_ed25519 root@10.1.0.2 "COMMAND"'
 
 # Or use ProxyJump for interactive session
-ssh -o ProxyJump=root@54.185.189.181 -i ~/.ssh/rw-ssh-key root@10.1.0.2
+ssh -o ProxyJump=root@44.250.235.222 -i ~/.ssh/id_ed25519 root@10.1.0.2
 ```
 
 ### Common Tasks
@@ -55,7 +55,7 @@ ssh -o ProxyJump=root@54.185.189.181 -i ~/.ssh/rw-ssh-key root@10.1.0.2
 | List all states | `ssh HYPERVISOR 'vm-state list'` |
 | Snapshot a slot | `ssh HYPERVISOR 'vm-state snapshot slot1 my-backup'` |
 | Migrate state to slot | `ssh HYPERVISOR 'vm-state migrate my-state slot2'` |
-| Deploy config | `NIX_SSHOPTS="-i ~/.ssh/rw-ssh-key" nixos-rebuild switch --flake .#hypervisor --target-host root@54.185.189.181` |
+| Deploy config | `NIX_SSHOPTS="-i ~/.ssh/id_ed25519" nixos-rebuild switch --flake .#hypervisor --target-host root@44.250.235.222` |
 
 ### vm-state CLI
 
@@ -86,7 +86,7 @@ vm-state restore checkpoint-jan4 recovered-state
 ## Task-Based Instructions
 
 ### When asked to "service the hypervisor" or "work on the host":
-1. SSH to `root@54.185.189.181` using `~/.ssh/rw-ssh-key`
+1. SSH to `root@44.250.235.222` using `~/.ssh/id_ed25519`
 2. Check system status: `systemctl status`, `zpool status`, `df -h`
 3. For config changes, edit local files and deploy via `nixos-rebuild`
 
@@ -99,7 +99,7 @@ vm-state restore checkpoint-jan4 recovered-state
 ### When asked to "deploy" or "update configuration":
 1. Edit Nix files locally
 2. Commit and push to git (Comin will auto-deploy to hypervisor)
-3. Or manually: `nixos-rebuild switch --flake .#hypervisor --target-host root@54.185.189.181`
+3. Or manually: `nixos-rebuild switch --flake .#hypervisor --target-host root@44.250.235.222`
 4. For slots: hypervisor rebuild installs new runners automatically
 
 ### When asked to "snapshot" a slot:
@@ -130,7 +130,7 @@ ssh HYPERVISOR 'systemctl stop microvm@slot1 && rm /var/lib/microvms/states/slot
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ AWS a1.metal - Hypervisor (54.185.189.181)                   │
+│ AWS a1.metal - Hypervisor (44.250.235.222)                   │
 │ Region: us-west-2 │ Instance: i-02f81409de8ff1c27           │
 │                                                              │
 │  ZFS Pool: microvms (100GB EBS volume)                      │
@@ -247,7 +247,7 @@ ssh HYPERVISOR 'ls -la /var/lib/microvms/states/'
 
 ## Important Notes
 
-- **SSH Key**: Always use `~/.ssh/rw-ssh-key` for connections
+- **SSH Key**: Always use `~/.ssh/id_ed25519` for connections
 - **GitOps**: Hypervisor auto-deploys from git via Comin (checks every 60s)
 - **Slots are persistent**: Root filesystem persists across reboots (in state)
 - **States are portable**: Use `vm-state` CLI to snapshot, clone, migrate
