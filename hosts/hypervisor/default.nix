@@ -39,6 +39,9 @@
 
     # LiteLLM proxy (OpenRouter → OpenAI-compatible API on port 4000)
     ./litellm.nix
+
+    # HTTPS reverse proxy for GitHub OAuth proxy (o.robw.fyi)
+    ./ghproxy.nix
   ];
 
   # Nix settings
