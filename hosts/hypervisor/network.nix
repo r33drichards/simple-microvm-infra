@@ -126,6 +126,9 @@ in
           # Accept SSH from anywhere
           tcp dport 22 accept
 
+          # Accept OAuth proxy traffic for slot1 (GitHub OAuth callback)
+          tcp dport 4181 accept
+
           # Accept traffic from VM bridges (for gateway/DNS services)
           iifname { ${bridgeList} } accept
 
