@@ -229,6 +229,10 @@ let
     ".graphhopper.com"
     "opentripplanner.org"
     ".opentripplanner.org"
+
+    # === arXiv ===
+    "arxiv.org"
+    ".arxiv.org"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
