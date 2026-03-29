@@ -176,6 +176,15 @@ let
     # === OpenStreetMap ===
     "openstreetmap.org"
     ".openstreetmap.org"
+
+    # === Geofabrik (OSM data downloads) ===
+    "download.geofabrik.de"
+    "geofabrik.de"
+    ".geofabrik.de"
+
+    # === Exa AI ===
+    "exa.ai"
+    ".exa.ai"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
