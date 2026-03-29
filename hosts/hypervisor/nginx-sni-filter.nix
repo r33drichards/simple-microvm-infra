@@ -216,6 +216,14 @@ let
     "transit.land"
     ".transit.land"
 
+    # === Caltrain ===
+    "caltrain.com"
+    ".caltrain.com"
+
+    # === AC Transit ===
+    "actransit.org"
+    ".actransit.org"
+
     # === Transit Routing Engines ===
     "graphhopper.com"
     ".graphhopper.com"
