@@ -42,6 +42,9 @@
 
     # HTTPS reverse proxy for GitHub OAuth proxy (o.robw.fyi)
     ./ghproxy.nix
+
+    # Host telemetry: Prometheus, Loki, Promtail, Grafana
+    ./telemetry.nix
   ];
 
   # Nix settings
