@@ -185,6 +185,16 @@ let
     # === Exa AI ===
     "exa.ai"
     ".exa.ai"
+
+    # === Wikipedia / Wikimedia ===
+    "wikipedia.org"
+    ".wikipedia.org"
+    "wikimedia.org"
+    ".wikimedia.org"
+    "mediawiki.org"
+    ".mediawiki.org"
+    "wikidata.org"
+    ".wikidata.org"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
