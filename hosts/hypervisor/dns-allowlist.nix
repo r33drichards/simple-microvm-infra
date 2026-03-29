@@ -176,17 +176,6 @@ let
     "tailscale.com"
     "controlplane.tailscale.com"
     "login.tailscale.com"
-
-    # === Twilio ===
-    "twilio.com"
-    "api.twilio.com"
-    "event-bridge.twilio.com"
-    "twiliocdn.com"
-
-    # === OpenStreetMap ===
-    "openstreetmap.org"
-    "tile.openstreetmap.org"
-    "nominatim.openstreetmap.org"
   ];
 
   # Bind to localhost - nftables will DNAT VM DNS traffic to 127.0.0.1:53
