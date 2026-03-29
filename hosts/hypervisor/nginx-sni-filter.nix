@@ -195,6 +195,32 @@ let
     ".mediawiki.org"
     "wikidata.org"
     ".wikidata.org"
+
+    # === Bay Area Transit Data (GTFS / GTFS-RT) ===
+    "511.org"
+    ".511.org"
+    "api.511.org"
+    "api.bart.gov"
+    "bart.gov"
+    ".bart.gov"
+    "sfmta.com"
+    ".sfmta.com"
+    "nextbus.com"
+    ".nextbus.com"
+    "retro.umoiq.com"
+    ".umoiq.com"
+    "mobilitydatabase.org"
+    ".mobilitydatabase.org"
+    "transitfeeds.com"
+    ".transitfeeds.com"
+    "transit.land"
+    ".transit.land"
+
+    # === Transit Routing Engines ===
+    "graphhopper.com"
+    ".graphhopper.com"
+    "opentripplanner.org"
+    ".opentripplanner.org"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
