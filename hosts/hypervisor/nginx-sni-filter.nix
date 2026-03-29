@@ -166,6 +166,16 @@ let
     ".whatsapp.com"
     ".whatsapp.net"
     ".wa.me"
+
+    # === Twilio ===
+    "twilio.com"
+    ".twilio.com"
+    "twiliocdn.com"
+    ".twiliocdn.com"
+
+    # === OpenStreetMap ===
+    "openstreetmap.org"
+    ".openstreetmap.org"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
