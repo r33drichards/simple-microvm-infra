@@ -233,6 +233,10 @@ let
     # === arXiv ===
     "arxiv.org"
     ".arxiv.org"
+
+    # === AllowKindle ===
+    "allowkindle.com"
+    ".allowkindle.com"
   ];
 
   # Build nginx stream map entries: allowed → proxy to destination; denied → reject endpoint
