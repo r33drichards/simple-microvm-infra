@@ -150,14 +150,17 @@ in
           # Accept Tailscale to VM traffic (allow remote access via VPN)
           iifname "tailscale0" oifname { ${bridgeList} } accept
 
-          # Block DNS-over-TLS (port 853) to prevent DNS filtering bypass
-          iifname { ${bridgeList} } tcp dport 853 drop
+          # === DEFAULT-DENY: VMs cannot reach the internet directly ===
+          # Allowed traffic is handled via DNAT to local proxies:
+          #   - HTTP  (80)        → nginx HTTP proxy   (127.0.0.1:${toString 3128})
+          #   - HTTPS (443)       → nginx SNI filter   (127.0.0.1:${toString 3129})
+          #   - SMTP  (25/465/587)→ SES relay proxy    (127.0.0.1:2525)
+          #   - DNS               → dnsmasq on gateway (10.X.0.1:53)
+          # DNATed traffic becomes INPUT, not FORWARD, so it bypasses this chain.
+          # Everything else from VMs is dropped here.
 
-          # Accept VM to internet traffic
-          iifname { ${bridgeList} } oifname "enP2p4s0" accept
-
-          # Accept internet to VM traffic (return traffic only)
-          iifname "enP2p4s0" oifname { ${bridgeList} } ct state { established, related } accept
+          # Log and drop all other VM-to-internet traffic
+          iifname { ${bridgeList} } oifname "enP2p4s0" log prefix "VM OUTBOUND DROP: " drop
 
           # Log and drop everything else
           log prefix "FORWARD DROP: " drop

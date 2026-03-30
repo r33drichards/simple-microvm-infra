@@ -45,6 +45,9 @@
 
     # Host telemetry: Prometheus, Loki, Promtail, Grafana
     ./telemetry.nix
+
+    # SMTP blocking + SES relay proxy for MicroVMs
+    ./smtp-proxy.nix
   ];
 
   # Nix settings
