@@ -61,28 +61,18 @@ in
     };
   };
 
-  # --- nftables: block direct SMTP, redirect to proxy ---
+  # --- nftables: redirect SMTP to local SES proxy ---
+  # Note: direct VM→internet is already blocked by the default-deny forward
+  # chain in network.nix. These DNAT rules intercept SMTP in prerouting
+  # so VMs can send mail transparently through the SES proxy.
   networking.nftables.tables.smtp-filter = {
     family = "ip";
     content = ''
-      chain smtp_block {
-        type filter hook forward priority filter - 1; policy accept;
-
-        # Block direct SMTP from VMs to internet (ports 25, 465, 587)
-        iifname { ${bridgeList} } oifname "enP2p4s0" tcp dport { 25, 465, 587 } log prefix "SMTP BLOCK: " drop
-      }
-
       chain smtp_redirect {
         type nat hook prerouting priority dstnat - 2; policy accept;
 
-        # Redirect SMTP submission (587) from VMs to local SES proxy
-        iifname { ${bridgeList} } tcp dport 587 dnat to 127.0.0.1:${toString smtpProxyPort}
-
-        # Redirect SMTPS (465) from VMs to local SES proxy
-        iifname { ${bridgeList} } tcp dport 465 dnat to 127.0.0.1:${toString smtpProxyPort}
-
-        # Redirect plain SMTP (25) from VMs to local SES proxy
-        iifname { ${bridgeList} } tcp dport 25 dnat to 127.0.0.1:${toString smtpProxyPort}
+        # Redirect all SMTP ports from VMs to local SES proxy
+        iifname { ${bridgeList} } tcp dport { 25, 465, 587 } dnat to 127.0.0.1:${toString smtpProxyPort}
       }
     '';
   };
