@@ -43,6 +43,9 @@
     # HTTPS reverse proxy for GitHub OAuth proxy (o.robw.fyi)
     ./ghproxy.nix
 
+    # Reverse proxy for inbound Twilio voice webhooks (twilio.robw.fyi → VM)
+    ./twilio-webhook.nix
+
     # Host telemetry: Prometheus, Loki, Promtail, Grafana
     ./telemetry.nix
   ];
