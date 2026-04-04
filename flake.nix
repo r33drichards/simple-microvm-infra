@@ -31,9 +31,16 @@
       inputs.comin.follows = "comin";
     };
 
+    # oclaw-nix-public — slot2 public-info agent (fly prefix, no private creds)
+    oclaw-nix-public = {
+      url = "github:r33drichards/oclaw-nix-public";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.comin.follows = "comin";
+    };
+
   };
 
-  outputs = { self, nixpkgs, microvm, comin, oclaw-nix }:
+  outputs = { self, nixpkgs, microvm, comin, oclaw-nix, oclaw-nix-public }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -50,7 +57,10 @@
           config = { microvm.mem = 8192; microvm.vcpu = 4; };
           extraModules = [ oclaw-nix.nixosModules.default ];
         };
-        slot2 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot2 = {
+          config = { microvm.mem = 6144; microvm.vcpu = 3; };
+          extraModules = [ oclaw-nix-public.nixosModules.default ];
+        };
         slot3 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot4 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot5 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
