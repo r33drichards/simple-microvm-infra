@@ -25,5 +25,5 @@ model_list:
 
 litellm_settings:
   drop_params: true
-  request_timeout: 540  # 9 min — fail before OpenClaw's 10 min hard timeout
-  stream_timeout: 540
+  request_timeout: 60   # fail fast so OpenClaw model fallback (sonnet→opus→free) kicks in quickly
+  stream_timeout: 120   # allow up to 2 min of streaming silence before timeout
