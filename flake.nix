@@ -38,9 +38,15 @@
       inputs.comin.follows = "comin";
     };
 
+    # bwrap wrapper for sandboxing CLI tools (used by incus-ssh-jail)
+    nix-bwrapper = {
+      url = "github:Naxdy/nix-bwrapper";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
-  outputs = { self, nixpkgs, microvm, comin, oclaw-nix, oclaw-nix-public }:
+  outputs = { self, nixpkgs, microvm, comin, oclaw-nix, oclaw-nix-public, nix-bwrapper }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -61,7 +67,13 @@
           config = { microvm.mem = 6144; microvm.vcpu = 3; };
           extraModules = [ oclaw-nix-public.nixosModules.default ];
         };
-        slot3 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot3 = {
+          config = { microvm.mem = 6144; microvm.vcpu = 3; };
+          extraModules = [
+            nix-bwrapper.nixosModules.default
+            ./modules/incus-ssh-jail
+          ];
+        };
         slot4 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot5 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
       };
