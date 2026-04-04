@@ -38,9 +38,15 @@
       inputs.comin.follows = "comin";
     };
 
+    # bubblewrap wrapper for filesystem-isolated CLI tools
+    nix-bwrapper = {
+      url = "github:Naxdy/nix-bwrapper";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
-  outputs = { self, nixpkgs, microvm, comin, oclaw-nix, oclaw-nix-public }:
+  outputs = { self, nixpkgs, microvm, comin, oclaw-nix, oclaw-nix-public, nix-bwrapper }:
     let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -61,7 +67,24 @@
           config = { microvm.mem = 6144; microvm.vcpu = 3; };
           extraModules = [ oclaw-nix-public.nixosModules.default ];
         };
-        slot3 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
+        slot3 = {
+          config = { microvm.mem = 8192; microvm.vcpu = 4; };
+          extraModules = [
+            nix-bwrapper.nixosModules.default
+            ./modules/incus-ssh-jail.nix
+            {
+              services.incus-ssh-jail = {
+                enable = true;
+                users.robertwendt = {
+                  authorizedKeys = [
+                    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJNEMM9i3WgPeA5dDmU7KMWTCcwLLi4EWfX8CKXuK7s robertwendt@Roberts-Laptop.local"
+                    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINlI6KJHGNUzVJV/OpBQPrcXQkYylvhoM3XvWJI1/tiZ"
+                  ];
+                };
+              };
+            }
+          ];
+        };
         slot4 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
         slot5 = { config = { microvm.mem = 6144; microvm.vcpu = 3; }; };
       };
