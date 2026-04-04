@@ -10,8 +10,18 @@ let
   # Extract list of bridge names for easier iteration
   bridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge) networks.networks);
 
-  # Generate nftables rules to block all inter-VM traffic
-  # For each bridge, create rules to DROP traffic to all other bridges
+  # Bridge pairs that are allowed to communicate (bypass isolation)
+  # slot2 <-> slot3: slot2 needs network access to the incus SSH jail on slot3
+  allowedBridgePairs = [
+    { a = "br-slot2"; b = "br-slot3"; }
+  ];
+
+  isAllowedPair = src: dst:
+    lib.any (pair:
+      (pair.a == src && pair.b == dst) || (pair.a == dst && pair.b == src)
+    ) allowedBridgePairs;
+
+  # Generate nftables rules to block inter-VM traffic (with exceptions)
   generateIsolationRules =
     let
       allBridges = bridges;
@@ -22,9 +32,13 @@ let
           let
             targetBridges = lib.filter (b: b != sourceBridge) allBridges;
           in
-          map (targetBridge:
-            "iifname \"${sourceBridge}\" oifname \"${targetBridge}\" drop"
-          ) targetBridges
+          lib.filter (rule: rule != "") (
+            map (targetBridge:
+              if isAllowedPair sourceBridge targetBridge
+              then ""  # skip — allowed pair
+              else "iifname \"${sourceBridge}\" oifname \"${targetBridge}\" drop"
+            ) targetBridges
+          )
         ) allBridges
       )
     );
@@ -143,7 +157,11 @@ in
           # Accept established/related connections
           ct state { established, related } accept
 
-          # Block inter-VM traffic (maintain isolation)
+          # Allow slot2 <-> slot3 (incus SSH jail access)
+          iifname "br-slot2" oifname "br-slot3" accept
+          iifname "br-slot3" oifname "br-slot2" accept
+
+          # Block remaining inter-VM traffic (maintain isolation)
           # Generated dynamically from networks.nix
           ${generateIsolationRules}
 
