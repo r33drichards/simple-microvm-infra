@@ -14,6 +14,12 @@ let
   bridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge) networks.networks);
   bridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") bridges);
 
+  # Unrestricted slots bypass SNI filtering (must match network.nix)
+  unrestrictedSlots = [ "slot2" ];
+  filteredBridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge)
+    (lib.filterAttrs (name: _: ! lib.elem name unrestrictedSlots) networks.networks));
+  filteredBridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") filteredBridges);
+
   httpsPort = 3129;
   httpPort = 3128;
 
@@ -302,8 +308,9 @@ in
     content = ''
       chain prerouting {
         type nat hook prerouting priority dstnat - 1; policy accept;
-        iifname { ${bridgeList} } tcp dport 443 dnat to 127.0.0.1:${toString httpsPort}
-        iifname { ${bridgeList} } tcp dport 80 dnat to 127.0.0.1:${toString httpPort}
+        # Only filter restricted slots; unrestricted slots bypass SNI filtering
+        iifname { ${filteredBridgeList} } tcp dport 443 dnat to 127.0.0.1:${toString httpsPort}
+        iifname { ${filteredBridgeList} } tcp dport 80 dnat to 127.0.0.1:${toString httpPort}
       }
     '';
   };

@@ -10,6 +10,15 @@ let
   # Extract list of bridge names for easier iteration
   bridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge) networks.networks);
 
+  # Unrestricted slots: full internet access (no port restrictions, no SNI filtering)
+  unrestrictedSlots = [ "slot2" ];
+
+  # Separate bridges into restricted and unrestricted
+  unrestrictedBridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge)
+    (lib.filterAttrs (name: _: lib.elem name unrestrictedSlots) networks.networks));
+  restrictedBridges = lib.attrValues (lib.mapAttrs (_: net: net.bridge)
+    (lib.filterAttrs (name: _: ! lib.elem name unrestrictedSlots) networks.networks));
+
   # Generate nftables rules to block all inter-VM traffic
   # For each bridge, create rules to DROP traffic to all other bridges
   generateIsolationRules =
@@ -31,6 +40,8 @@ let
 
   # Generate list of bridge interfaces for nftables sets
   bridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") bridges);
+  restrictedBridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") restrictedBridges);
+  unrestrictedBridgeList = lib.concatStringsSep ", " (map (b: "\"${b}\"") unrestrictedBridges);
 in
 {
   # Create isolated bridges dynamically from networks.nix
@@ -153,8 +164,12 @@ in
           # Block DNS-over-TLS (port 853) to prevent DNS filtering bypass
           iifname { ${bridgeList} } tcp dport 853 drop
 
-          # Accept VM to internet traffic
-          iifname { ${bridgeList} } oifname "enP2p4s0" accept
+          # Unrestricted slots: full internet access
+          iifname { ${unrestrictedBridgeList} } oifname "enP2p4s0" accept
+
+          # Restricted slots: only allow HTTP and HTTPS (default deny everything else)
+          # Note: HTTP/HTTPS traffic is also DNATed to nginx SNI filter for domain filtering
+          iifname { ${restrictedBridgeList} } oifname "enP2p4s0" tcp dport { 80, 443 } accept
 
           # Accept internet to VM traffic (return traffic only)
           iifname "enP2p4s0" oifname { ${bridgeList} } ct state { established, related } accept
