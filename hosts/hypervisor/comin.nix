@@ -27,10 +27,12 @@
     MaxRetentionSec=1month
   '';
 
-  # VM auto-restart module - DISABLED for manual control
-  # To manually update VMs after deployment, run: microvm-update-all
+  # Auto-restart slots after Comin deploys so host-side config changes
+  # (e.g., microvm.mem bumps) actually take effect without a manual step.
+  # The update script diffs `current` vs `booted` symlinks and only restarts
+  # slots whose declared runner has changed.
   services.microvm-auto-restart = {
-    enable = false;  # Set to true to auto-restart VMs on every deployment
-    triggerAfterComin = true;  # Only matters if enable = true
+    enable = true;
+    triggerAfterComin = true;
   };
 }

@@ -13,8 +13,8 @@ let
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
 
-    # List of all VMs
-    VMS="vm1 vm2 vm3 vm4 vm5"
+    # List of all slots (matches modules/networks.nix + flake.nix slots attrset)
+    VMS="slot1 slot2 slot3 slot4 slot5"
 
     echo "Updating VM configuration symlinks and checking for changes..."
 
