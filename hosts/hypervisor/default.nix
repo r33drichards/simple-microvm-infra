@@ -45,6 +45,9 @@
 
     # Host telemetry: Prometheus, Loki, Promtail, Grafana
     ./telemetry.nix
+
+    # OTel receiver: ingests slot-side OTLP, fans out to Prometheus + Loki
+    ./otel-collector.nix
   ];
 
   # Nix settings
