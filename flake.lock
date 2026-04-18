@@ -120,11 +120,11 @@
         "sops-nix": "sops-nix"
       },
       "locked": {
-        "lastModified": 1776536643,
-        "narHash": "sha256-w6iYZvms0JBXQAvdj8UhXL3H/n6T+oPG5cVt0mXF9f4=",
+        "lastModified": 1776541984,
+        "narHash": "sha256-TXOsfmBs15Zycn6povIXMpgQlVAvdrk2inZesDj/5VY=",
         "owner": "r33drichards",
         "repo": "oclaw-nix",
-        "rev": "989941aa24e39ada797dbc944b7e2f40103b1343",
+        "rev": "ac95054d223af24d3feffbeef1620a2b9cd1c554",
         "type": "github"
       },
       "original": {
@@ -144,11 +144,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable_2"
       },
       "locked": {
-        "lastModified": 1776536685,
-        "narHash": "sha256-pmaNZOQsteToFk1hrb4WX27DMbytyCKOyzCValsRjhE=",
+        "lastModified": 1776541985,
+        "narHash": "sha256-W5F7FLxvY5b4JVDuVQfH8MrqelHx4tEWwHs0KiJWpyk=",
         "owner": "r33drichards",
         "repo": "oclaw-nix-public",
-        "rev": "ef4b57890099b17ec014e63ffc7c2af1bf67d98c",
+        "rev": "e093f455b61a6e6dfea561ba34affc0570a5cf50",
         "type": "github"
       },
       "original": {
