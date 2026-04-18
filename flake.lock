@@ -92,6 +92,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-unstable_2": {
+      "locked": {
+        "lastModified": 1776329215,
+        "narHash": "sha256-a8BYi3mzoJ/AcJP8UldOx8emoPRLeWqALZWu4ZvjPXw=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b86751bc4085f48661017fa226dee99fab6c651b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "oclaw-nix": {
       "inputs": {
         "comin": [
@@ -100,14 +116,15 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "nixpkgs-unstable": "nixpkgs-unstable"
+        "nixpkgs-unstable": "nixpkgs-unstable",
+        "sops-nix": "sops-nix"
       },
       "locked": {
-        "lastModified": 1774373595,
-        "narHash": "sha256-k9qcOQYR96KmLJALlv+0caoA3OybIC4oSWXg9YfJSqg=",
+        "lastModified": 1776536643,
+        "narHash": "sha256-w6iYZvms0JBXQAvdj8UhXL3H/n6T+oPG5cVt0mXF9f4=",
         "owner": "r33drichards",
         "repo": "oclaw-nix",
-        "rev": "f75287b7dec6b92c23354070d3ab7899419ec25a",
+        "rev": "989941aa24e39ada797dbc944b7e2f40103b1343",
         "type": "github"
       },
       "original": {
@@ -116,12 +133,58 @@
         "type": "github"
       }
     },
+    "oclaw-nix-public": {
+      "inputs": {
+        "comin": [
+          "comin"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "nixpkgs-unstable": "nixpkgs-unstable_2"
+      },
+      "locked": {
+        "lastModified": 1776536685,
+        "narHash": "sha256-pmaNZOQsteToFk1hrb4WX27DMbytyCKOyzCValsRjhE=",
+        "owner": "r33drichards",
+        "repo": "oclaw-nix-public",
+        "rev": "ef4b57890099b17ec014e63ffc7c2af1bf67d98c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "r33drichards",
+        "repo": "oclaw-nix-public",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "comin": "comin",
         "microvm": "microvm",
         "nixpkgs": "nixpkgs",
-        "oclaw-nix": "oclaw-nix"
+        "oclaw-nix": "oclaw-nix",
+        "oclaw-nix-public": "oclaw-nix-public"
+      }
+    },
+    "sops-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "oclaw-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1774303811,
+        "narHash": "sha256-fhG4JAcLgjKwt+XHbjs8brpWnyKUfU4LikLm3s0Q/ic=",
+        "owner": "Mic92",
+        "repo": "sops-nix",
+        "rev": "614e256310e0a4f8a9ccae3fa80c11844fba7042",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Mic92",
+        "repo": "sops-nix",
+        "type": "github"
       }
     },
     "spectrum": {
