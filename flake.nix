@@ -54,7 +54,7 @@
       # States are just block storage that can be snapshotted and swapped
       slots = {
         slot1 = {
-          config = { microvm.mem = 12288; microvm.vcpu = 4; };
+          config = { microvm.mem = 16384; microvm.vcpu = 6; };
           extraModules = [ oclaw-nix.nixosModules.default ];
         };
         slot2 = {
