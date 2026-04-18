@@ -120,11 +120,11 @@
         "sops-nix": "sops-nix"
       },
       "locked": {
-        "lastModified": 1776543188,
-        "narHash": "sha256-btRDMS7YKBBUDAwJlap6rFuTyovBK35nNPpW9o+m9Ys=",
+        "lastModified": 1776544717,
+        "narHash": "sha256-nkEa+FV7bGGz8AyxGhBKneI+6ufLNAQl5e0fZ4eHKew=",
         "owner": "r33drichards",
         "repo": "oclaw-nix",
-        "rev": "ec18ac9bcf7e36d4e456660bf09c62eb0b96fe51",
+        "rev": "aa7b974081c8a70cc5f7edf7a9a29e60267214b6",
         "type": "github"
       },
       "original": {
